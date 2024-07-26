@@ -1,102 +1,98 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
-import AllEntities from './AllEntities'; // replace with the actual path
-import * as tagsApi from 'src/features/tags/tags';
-import { withToasts } from 'src/components/MessageToasts/withToasts';
+import {
+  getOnlyExtraFormData,
+  checkIsMissingRequiredValue,
+  checkIsApplyDisabled,
+  useChartsVerboseMaps,
+} from './yourModulePath'; // replace with the actual path
+import { renderHook } from '@testing-library/react-hooks';
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import { RootState } from 'src/dashboard/types';
 
-jest.mock('src/features/tags/tags');
-jest.mock('src/components/MessageToasts/withToasts', () => ({
-  withToasts: (Component) => (props) => <Component {...props} addSuccessToast={jest.fn()} addDangerToast={jest.fn()} />,
-}));
+const mockStore = configureStore([]);
 
-describe('AllEntities', () => {
-  const mockTag = {
-    id: 1,
-    name: 'Test Tag',
-    description: 'Test Description',
-    created_by: { first_name: 'John', last_name: 'Doe' },
-    created_on_delta_humanized: '2 days ago',
-    changed_on_delta_humanized: '1 day ago',
-    changed_by: { first_name: 'Jane', last_name: 'Smith' },
-  };
-
-  const mockTaggedObjects = [
-    {
-      id: 1,
-      type: 'dashboard',
-      name: 'Dashboard 1',
-      url: '/dashboard/1',
-      changed_on: '2021-01-01T00:00:00',
-      created_by: 1,
-      creator: 'John Doe',
-      owners: [{ first_name: 'John', last_name: 'Doe' }],
-      tags: [],
-    },
-    {
-      id: 2,
-      type: 'chart',
-      name: 'Chart 1',
-      url: '/chart/1',
-      changed_on: '2021-01-01T00:00:00',
-      created_by: 1,
-      creator: 'John Doe',
-      owners: [{ first_name: 'John', last_name: 'Doe' }],
-      tags: [],
-    },
-  ];
-
-  beforeEach(() => {
-    jest.resetAllMocks();
+describe('Utility Functions', () => {
+  describe('getOnlyExtraFormData', () => {
+    it('should extract only extraFormData from data', () => {
+      const data = {
+        id1: { id: 'id1', extraFormData: { foo: 'bar' } },
+        id2: { id: 'id2', extraFormData: { baz: 'qux' } },
+      };
+      const expected = {
+        id1: { foo: 'bar' },
+        id2: { baz: 'qux' },
+      };
+      expect(getOnlyExtraFormData(data)).toEqual(expected);
+    });
   });
 
-  it('should render and display loading state initially', () => {
-    tagsApi.fetchSingleTag.mockImplementation((id, success) => success(mockTag));
+  describe('checkIsMissingRequiredValue', () => {
+    it('should return true if enableEmptyFilter is true and value is null or undefined', () => {
+      const filter = {
+        controlValues: { enableEmptyFilter: true },
+      };
 
-    render(<AllEntities />);
+      expect(checkIsMissingRequiredValue(filter, { value: null })).toBe(true);
+      expect(checkIsMissingRequiredValue(filter, { value: undefined })).toBe(true);
+    });
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    it('should return false if enableEmptyFilter is false or value is not null/undefined', () => {
+      const filter = {
+        controlValues: { enableEmptyFilter: false },
+      };
+
+      expect(checkIsMissingRequiredValue(filter, { value: null })).toBe(false);
+      expect(checkIsMissingRequiredValue(filter, { value: undefined })).toBe(false);
+      expect(checkIsMissingRequiredValue(filter, { value: 'value' })).toBe(false);
+    });
   });
 
-  it('should fetch and display tag information', async () => {
-    tagsApi.fetchSingleTag.mockImplementation((id, success) => success(mockTag));
-    tagsApi.fetchObjectsByTagIds.mockImplementation((params, success) => success(mockTaggedObjects));
+  describe('checkIsApplyDisabled', () => {
+    it('should return true if dataMasks are equal or length mismatch or missing required values', () => {
+      const dataMaskSelected = {
+        id1: { id: 'id1', extraFormData: { foo: 'bar' } },
+      };
+      const dataMaskApplied = {
+        id1: { id: 'id1', extraFormData: { foo: 'bar' } },
+      };
+      const filters = [];
 
-    render(<AllEntities />);
+      expect(checkIsApplyDisabled(dataMaskSelected, dataMaskApplied, filters)).toBe(true);
+    });
 
-    await waitFor(() => expect(screen.getByText('Test Tag')).toBeInTheDocument());
+    it('should return false if dataMasks are not equal and no missing required values', () => {
+      const dataMaskSelected = {
+        id1: { id: 'id1', extraFormData: { foo: 'bar' } },
+      };
+      const dataMaskApplied = {
+        id1: { id: 'id1', extraFormData: { foo: 'baz' } },
+      };
+      const filters = [];
 
-    expect(screen.getByText('Test Description')).toBeInTheDocument();
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('2 days ago')).toBeInTheDocument();
-    expect(screen.getByText('1 day ago')).toBeInTheDocument();
-    expect(screen.getByText('Dashboard 1')).toBeInTheDocument();
-    expect(screen.getByText('Chart 1')).toBeInTheDocument();
+      expect(checkIsApplyDisabled(dataMaskSelected, dataMaskApplied, filters)).toBe(false);
+    });
   });
 
-  it('should handle errors in fetching tag information', async () => {
-    tagsApi.fetchSingleTag.mockImplementation((id, success, error) => error());
+  describe('useChartsVerboseMaps', () => {
+    it('should return verbose maps for charts from state', () => {
+      const initialState: RootState = {
+        charts: {
+          chart1: { form_data: { datasource: 'ds1' } },
+        },
+        datasources: {
+          ds1: { verbose_map: { foo: 'Foo' } },
+        },
+      };
 
-    render(<AllEntities />);
+      const store = mockStore(initialState);
 
-    await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
+      const { result } = renderHook(() => useChartsVerboseMaps(), {
+        wrapper: ({ children }) => <Provider store={store}>{children}</Provider>,
+      });
 
-    expect(screen.getByText('Error Fetching Tagged Objects')).toBeInTheDocument();
-  });
-
-  it('should handle opening and closing of the TagModal', async () => {
-    tagsApi.fetchSingleTag.mockImplementation((id, success) => success(mockTag));
-
-    render(<AllEntities />);
-
-    await waitFor(() => expect(screen.getByText('Test Tag')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByText('Edit Tag'));
-
-    expect(screen.getByText('Tag Modal')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('Close'));
-
-    expect(screen.queryByText('Tag Modal')).not.toBeInTheDocument();
+      expect(result.current).toEqual({
+        chart1: { foo: 'Foo' },
+      });
+    });
   });
 });
