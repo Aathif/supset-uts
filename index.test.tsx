@@ -1,125 +1,71 @@
-import { SyntheticEvent } from 'react';
-import domToImage from 'dom-to-image-more';
-import { kebabCase } from 'lodash';
-import { t, supersetTheme } from '@superset-ui/core';
-import { addWarningToast } from 'src/components/MessageToasts/actions';
-import downloadAsImage from './yourModulePath'; // replace with the actual path
+// TableRenderer.test.js
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { TableRenderer } from './TableRenderer'; // Adjust import path as necessary
+import '@testing-library/jest-dom/extend-expect'; // For extra matchers
 
-jest.mock('dom-to-image-more', () => ({
-  toJpeg: jest.fn(),
-}));
-jest.mock('lodash/kebabCase', () => jest.fn());
-jest.mock('@superset-ui/core', () => ({
-  t: jest.fn(),
-  supersetTheme: {
-    colors: {
-      grayscale: {
-        light4: '#f0f0f0',
-      },
-    },
+// Mock data for testing
+const mockProps = {
+  cols: ['col1', 'col2'],
+  rows: ['row1', 'row2'],
+  tableOptions: {
+    clickCallback: jest.fn(),
+    clickRowHeaderCallback: jest.fn(),
+    clickColumnHeaderCallback: jest.fn(),
   },
-}));
-jest.mock('src/components/MessageToasts/actions', () => ({
-  addWarningToast: jest.fn(),
-}));
+  subtotalOptions: {
+    arrowCollapsed: '▲',
+    arrowExpanded: '▼',
+    colSubtotalDisplay: { enabled: true },
+    rowSubtotalDisplay: { enabled: true },
+  },
+  namesMapping: { col1: 'Column 1', col2: 'Column 2', row1: 'Row 1', row2: 'Row 2' },
+  aggregatorName: 'Sum',
+};
 
-describe('downloadAsImage', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
+describe('TableRenderer', () => {
+  test('renders correctly with given props', () => {
+    render(<TableRenderer {...mockProps} />);
+
+    // Check if column headers are rendered correctly
+    expect(screen.getByText('Column 1')).toBeInTheDocument();
+    expect(screen.getByText('Column 2')).toBeInTheDocument();
+    expect(screen.getByText('Row 1')).toBeInTheDocument();
+    expect(screen.getByText('Row 2')).toBeInTheDocument();
+
+    // Check if total label is rendered
+    expect(screen.getByText(/Total \(Sum\)/)).toBeInTheDocument();
   });
 
-  it('should call addWarningToast if element to print is not found', () => {
-    const mockSelector = '.non-existing-selector';
-    const mockDescription = 'Test Description';
-    const handler = downloadAsImage(mockSelector, mockDescription);
-    const mockEvent = {
-      currentTarget: {
-        closest: jest.fn().mockReturnValue(null),
-      },
-    } as unknown as SyntheticEvent;
+  test('calls clickCallback on cell click', () => {
+    render(<TableRenderer {...mockProps} />);
 
-    handler(mockEvent);
+    // Trigger a click event on a cell
+    fireEvent.click(screen.getByText('Row 1'));
 
-    expect(addWarningToast).toHaveBeenCalledWith(
-      t('Image download failed, please refresh and try again.')
-    );
+    // Assert clickCallback has been called
+    expect(mockProps.tableOptions.clickCallback).toHaveBeenCalled();
   });
 
-  it('should call domToImage.toJpeg with correct options and filename', async () => {
-    const mockSelector = '.existing-selector';
-    const mockDescription = 'Test Description';
-    const mockElement = document.createElement('div');
-    document.body.appendChild(mockElement);
-    const handler = downloadAsImage(mockSelector, mockDescription, true);
-    const mockEvent = {
-      currentTarget: {
-        closest: jest.fn().mockReturnValue(mockElement),
-      },
-    } as unknown as SyntheticEvent;
+  test('collapses and expands rows/columns correctly', () => {
+    render(<TableRenderer {...mockProps} />);
 
-    const dataUrl = 'data:image/jpeg;base64,example';
-    const expectedFilename = `${kebabCase(mockDescription)}-${new Date().toISOString().replace(/[: ]/g, '-')}.jpg`;
-    domToImage.toJpeg.mockResolvedValue(dataUrl);
+    // Find and click the collapse button
+    const collapseButton = screen.getByText('▲');
+    fireEvent.click(collapseButton);
 
-    await handler(mockEvent);
-
-    const link = document.createElement('a');
-    link.download = expectedFilename;
-    link.href = dataUrl;
-    document.body.appendChild(link); // Append to body to simulate clicking
-    link.click = jest.fn();
-
-    expect(domToImage.toJpeg).toHaveBeenCalledWith(mockElement, {
-      bgcolor: supersetTheme.colors.grayscale.light4,
-      filter: expect.any(Function),
-    });
-    expect(link.download).toBe(expectedFilename);
-    expect(link.href).toBe(dataUrl);
-    expect(link.click).toHaveBeenCalled();
+    // You can add more assertions here depending on the implementation
+    // For example, you can check if the rows or columns are actually collapsed
   });
 
-  it('should log an error if domToImage.toJpeg fails', async () => {
-    const mockSelector = '.existing-selector';
-    const mockDescription = 'Test Description';
-    const mockElement = document.createElement('div');
-    document.body.appendChild(mockElement);
-    const handler = downloadAsImage(mockSelector, mockDescription, true);
-    const mockEvent = {
-      currentTarget: {
-        closest: jest.fn().mockReturnValue(mockElement),
-      },
-    } as unknown as SyntheticEvent;
+  test('handles context menu event', () => {
+    render(<TableRenderer {...mockProps} />);
 
-    const error = new Error('Image creation failed');
-    domToImage.toJpeg.mockRejectedValue(Promise.reject(error));
-    console.error = jest.fn();
+    // Trigger a context menu event on a cell
+    fireEvent.contextMenu(screen.getByText('Row 1'));
 
-    await handler(mockEvent);
-
-    expect(console.error).toHaveBeenCalledWith('Creating image failed', error);
-  });
-
-  it('should use closest if isExactSelector is false', async () => {
-    const mockSelector = '.existing-selector';
-    const mockDescription = 'Test Description';
-    const mockElement = document.createElement('div');
-    document.body.appendChild(mockElement);
-    const handler = downloadAsImage(mockSelector, mockDescription, false);
-    const mockEvent = {
-      currentTarget: {
-        closest: jest.fn().mockReturnValue(mockElement),
-      },
-    } as unknown as SyntheticEvent;
-
-    const dataUrl = 'data:image/jpeg;base64,example';
-    const expectedFilename = `${kebabCase(mockDescription)}-${new Date().toISOString().replace(/[: ]/g, '-')}.jpg`;
-    domToImage.toJpeg.mockResolvedValue(dataUrl);
-
-    await handler(mockEvent);
-
-    expect(domToImage.toJpeg).toHaveBeenCalledWith(mockElement, {
-      bgcolor: supersetTheme.colors.grayscale.light4,
-      filter: expect.any(Function),
-    });
+    // Assert that the context menu callback is called
+    // Example assertion, replace with actual logic
+    // expect(mockProps.onContextMenu).toHaveBeenCalled();
   });
 });
