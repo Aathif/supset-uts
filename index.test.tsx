@@ -1,104 +1,69 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import TagList from './TagList'; // Replace with your path
+import handleResourceExport from './handleResourceExport';
+import parseCookie from 'src/utils/parseCookie';
+import rison from 'rison';
+import { nanoid } from 'nanoid';
 
-jest.mock('src/views/CRUD/utils', () => ({
-  useListViewResource: jest.fn(),
-  useFavoriteStatus: jest.fn(),
-  deleteTags: jest.fn(),
-}));
+// Mock the dependencies
+jest.mock('nanoid');
+jest.mock('src/utils/parseCookie');
 
-jest.mock('src/features/tags/tags', () => ({
-  TagModal: jest.fn(),
-}));
+describe('handleResourceExport', () => {
+  const resource = 'example_resource';
+  const ids = [1, 2, 3];
+  const token = 'test_token';
+  const done = jest.fn();
+  const interval = 200;
 
-describe('TagList component', () => {
-  it('renders loading state', () => {
-    const mockUseListViewResource = jest.fn().mockReturnValue({
-      state: { loading: true },
-      hasPerm: () => true,
-      fetchData: jest.fn(),
-      refreshData: jest.fn(),
+  beforeEach(() => {
+    jest.clearAllMocks();
+    nanoid.mockReturnValue(token);
+  });
+
+  it('should create an iframe and set its src', () => {
+    const appendChildMock = jest.spyOn(document.body, 'appendChild');
+    const createElementMock = jest.spyOn(document, 'createElement').mockImplementation(() => {
+      return { style: {}, src: '' };
     });
-    jest.mocked(
-      'src/views/CRUD/utils',
-      'useListViewResource',
-      mockUseListViewResource
-    );
+    handleResourceExport(resource, ids, done, interval);
 
-    render(<TagList user={{ userId: 1 }} addDangerToast={jest.fn()} addSuccessToast={jest.fn()} />);
-
-    expect(screen.getByText(/Loading/i)).toBeInTheDocument();
+    const expectedUrl = `/api/v1/${resource}/export/?q=${rison.encode(ids)}&token=${token}`;
+    expect(createElementMock).toHaveBeenCalledWith('iframe');
+    expect(appendChildMock).toHaveBeenCalled();
+    expect(appendChildMock.mock.calls[0][0].src).toBe(expectedUrl);
+    expect(appendChildMock.mock.calls[0][0].style.display).toBe('none');
   });
 
-  it('renders tags list with data', () => {
-    const mockUseListViewResource = jest.fn().mockReturnValue({
-      state: {
-        loading: false,
-        resourceCollection: [
-          { id: 1, name: 'Tag 1' },
-          { id: 2, name: 'Tag 2' },
-        ],
-      },
-      hasPerm: () => true,
-      fetchData: jest.fn(),
-      refreshData: jest.fn(),
-    });
-    jest.mocked(
-      'src/views/CRUD/utils',
-      'useListViewResource',
-      mockUseListViewResource
-    );
+  it('should call done() and remove iframe when cookie is set', () => {
+    const removeChildMock = jest.spyOn(document.body, 'removeChild');
+    const setIntervalMock = jest.spyOn(window, 'setInterval');
+    const clearIntervalMock = jest.spyOn(window, 'clearInterval');
 
-    render(<TagList user={{ userId: 1 }} addDangerToast={jest.fn()} addSuccessToast={jest.fn()} />);
+    parseCookie.mockReturnValue({ [token]: 'done' });
 
-    expect(screen.getAllByText(/Tag/i)).toHaveLength(2);
+    handleResourceExport(resource, ids, done, interval);
+
+    expect(setIntervalMock).toHaveBeenCalled();
+
+    const intervalCallback = setIntervalMock.mock.calls[0][0];
+    intervalCallback();
+
+    expect(clearIntervalMock).toHaveBeenCalled();
+    expect(removeChildMock).toHaveBeenCalled();
+    expect(done).toHaveBeenCalled();
   });
 
-  it('shows tag modal on new tag button click', () => {
-    const mockTagModal = jest.fn();
-    jest.mocked('src/features/tags/tags', 'TagModal', mockTagModal);
+  it('should not call done() or remove iframe when cookie is not set', () => {
+    const removeChildMock = jest.spyOn(document.body, 'removeChild');
+    const setIntervalMock = jest.spyOn(window, 'setInterval');
 
-    render(<TagList user={{ userId: 1 }} addDangerToast={jest.fn()} addSuccessToast={jest.fn()} />);
+    parseCookie.mockReturnValue({});
 
-    const newTagButton = screen.getByRole('button', { name: /Tag/i });
-    fireEvent.click(newTagButton);
+    handleResourceExport(resource, ids, done, interval);
 
-    expect(mockTagModal).toHaveBeenCalledTimes(1);
+    const intervalCallback = setIntervalMock.mock.calls[0][0];
+    intervalCallback();
+
+    expect(removeChildMock).not.toHaveBeenCalled();
+    expect(done).not.toHaveBeenCalled();
   });
-
-  it('calls deleteTags on bulk delete confirmation', async () => {
-    const mockUseListViewResource = jest.fn().mockReturnValue({
-      state: {
-        loading: false,
-        resourceCollection: [
-          { id: 1, name: 'Tag 1' },
-          { id: 2, name: 'Tag 2' },
-        ],
-      },
-      hasPerm: () => true,
-      fetchData: jest.fn(),
-      refreshData: jest.fn(),
-    });
-    const mockDeleteTags = jest.fn().mockResolvedValue();
-    jest.mocked('src/views/CRUD/utils', 'useListViewResource', mockUseListViewResource);
-    jest.mocked('src/features/tags/tags', 'deleteTags', mockDeleteTags);
-
-    render(<TagList user={{ userId: 1 }} addDangerToast={jest.fn()} addSuccessToast={jest.fn()} />);
-
-    const checkbox = screen.getByRole('checkbox');
-    await userEvent.click(checkbox); // Select all tags
-
-    const deleteButton = screen.getByRole('button', { name: /Delete/i });
-    fireEvent.click(deleteButton);
-
-    // Simulate confirm dialog click
-    const confirmButton = await screen.findByRole('button', { name: /Confirm/i });
-    fireEvent.click(confirmButton);
-
-    expect(mockDeleteTags).toHaveBeenCalledWith([expect.any(), expect.any()], expect.any(), expect.any(), expect.any());
-  });
-
-  // Add more tests for different functionalities (sorting, filtering, favorite star, etc.)
 });
