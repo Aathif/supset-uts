@@ -1,39 +1,13 @@
-jest.mock('@superset-ui/core', () => ({
-  isRecordAnnotationResult: jest.fn(),
-  isTableAnnotationLayer: jest.fn(),
-}));
+describe('formatAnnotationLabel', () => {
+  it('should format annotation label correctly', () => {
+    const result = formatAnnotationLabel('name', 'title', ['desc1', 'desc2']);
 
-describe('extractRecordAnnotations', () => {
-  it('should extract record annotations correctly', () => {
-    isRecordAnnotationResult.mockReturnValue(true);
-    isTableAnnotationLayer.mockReturnValue(true);
-
-    const annotationLayer = { name: 'testLayer' };
-    const annotationData = {
-      testLayer: {
-        records: [
-          { long_descr: 'desc1', end_dttm: 'end1', start_dttm: 'start1', short_descr: 'title1' },
-        ],
-      },
-    };
-
-    const result = extractRecordAnnotations(annotationLayer, annotationData);
-
-    expect(result).toEqual([
-      {
-        descriptions: ['desc1'],
-        intervalEnd: 'end1',
-        time: 'start1',
-        title: 'title1',
-      },
-    ]);
+    expect(result).toBe('name - title\n\ndesc1\n\ndesc2');
   });
 
-  it('should throw an error if the annotation result is not valid', () => {
-    isRecordAnnotationResult.mockReturnValue(false);
+  it('should handle missing descriptions', () => {
+    const result = formatAnnotationLabel('name', 'title', []);
 
-    expect(() => {
-      extractRecordAnnotations({}, {});
-    }).toThrow('Please rerun the query.');
+    expect(result).toBe('name - title');
   });
 });
