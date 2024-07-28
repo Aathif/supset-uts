@@ -1,52 +1,70 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import DateFilterPlugin from './DateFilterPlugin';
-import { styled, t, tn } from '@superset-ui/core';
-import moment from 'moment';
+import PluginFilterTimeColumn from './PluginFilterTimeColumn';
+import { ensureIsArray, t, tn, GenericDataType } from '@superset-ui/core';
 
-// Mock the dependencies
 jest.mock('@superset-ui/core', () => ({
-  styled: jest.fn().mockImplementation((component) => component),
+  ensureIsArray: jest.fn((value) => (Array.isArray(value) ? value : [value])),
   t: jest.fn((str) => str),
   tn: jest.fn((str, strPlural, count) => (count > 1 ? strPlural : str)),
+  GenericDataType: {
+    Temporal: 'temporal',
+  },
 }));
 
-jest.mock('src/components/DatePicker', () => ({
-  RangePicker: ({ onChange, value, picker }) => (
+jest.mock('src/components', () => ({
+  Select: ({ value, options, placeholder, onChange }) => (
     <div>
-      <input
-        data-testid="datepicker"
-        type="text"
-        value={value ? `${value[0].format('YYYY-MM-DD')} : ${value[1].format('YYYY-MM-DD')}` : ''}
+      <select
+        data-testid="select"
+        value={value}
         onChange={(e) => {
-          const [start, end] = e.target.value.split(' : ');
-          onChange([moment(start), moment(end)], [start, end]);
+          const selectedOptions = Array.from(
+            e.target.selectedOptions,
+            (option) => option.value
+          );
+          onChange(selectedOptions);
         }}
-      />
-      {picker && <div data-testid="picker">{picker}</div>}
+      >
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </div>
   ),
 }));
 
-describe('DateFilterPlugin', () => {
+describe('PluginFilterTimeColumn', () => {
   const mockSetDataMask = jest.fn();
+  const mockSetHoveredFilter = jest.fn();
+  const mockUnsetHoveredFilter = jest.fn();
+  const mockSetFocusedFilter = jest.fn();
+  const mockUnsetFocusedFilter = jest.fn();
+  const mockSetFilterActive = jest.fn();
 
   const defaultProps = {
-    setDataMask: mockSetDataMask,
-    width: 400,
-    height: 400,
-    filterState: {},
+    data: [
+      { column_name: 'time_col1', verbose_name: 'Time Column 1', dtype: GenericDataType.Temporal },
+      { column_name: 'time_col2', verbose_name: 'Time Column 2', dtype: GenericDataType.Temporal },
+    ],
     formData: {
-      enableTime: false,
-      monthlyFilter: false,
-      quarterFilter: false,
-      yearlyFilter: false,
-      customDateFormat: 'YYYY-MM-DD',
-      displayDateFormat: 'YYYY-MM-DD',
-      displayTimeFormat: 'HH:mm:ss',
-      timeWith12hoursFormat: false,
-      inView: true,
+      defaultValue: ['time_col1'],
     },
+    height: 400,
+    width: 400,
+    setDataMask: mockSetDataMask,
+    setHoveredFilter: mockSetHoveredFilter,
+    unsetHoveredFilter: mockUnsetHoveredFilter,
+    setFocusedFilter: mockSetFocusedFilter,
+    unsetFocusedFilter: mockUnsetFocusedFilter,
+    setFilterActive: mockSetFilterActive,
+    filterState: {},
+    inputRef: React.createRef(),
   };
 
   beforeEach(() => {
@@ -54,56 +72,34 @@ describe('DateFilterPlugin', () => {
   });
 
   it('should render the component', () => {
-    render(<DateFilterPlugin {...defaultProps} />);
-    expect(screen.getByTestId('datepicker')).toBeInTheDocument();
+    render(<PluginFilterTimeColumn {...defaultProps} />);
+    expect(screen.getByTestId('select')).toBeInTheDocument();
   });
 
-  it('should handle date range change', () => {
-    render(<DateFilterPlugin {...defaultProps} />);
-    const datepicker = screen.getByTestId('datepicker');
-    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-01-31' } });
-    expect(mockSetDataMask).toHaveBeenCalledWith({
-      extraFormData: { time_range: '2023-01-01 : 2023-01-31' },
-      filterState: { value: '2023-01-01 : 2023-01-31' },
-    });
+  it('should display the correct placeholder text when there are time columns', () => {
+    render(<PluginFilterTimeColumn {...defaultProps} />);
+    expect(screen.getByTestId('select').children[0]).toHaveTextContent('2 options');
   });
 
-  it('should handle monthly filter', () => {
-    render(<DateFilterPlugin {...defaultProps} formData={{ ...defaultProps.formData, monthlyFilter: true }} />);
-    const datepicker = screen.getByTestId('datepicker');
-    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-01-31' } });
-    expect(mockSetDataMask).toHaveBeenCalledWith({
-      extraFormData: { time_range: '2023-01-01 : 2023-01-31' },
-      filterState: { value: '2023-01-01 : 2023-01-31' },
-    });
+  it('should display "No time columns" when there are no time columns', () => {
+    render(<PluginFilterTimeColumn {...defaultProps} data={[]} />);
+    expect(screen.getByTestId('select').children[0]).toHaveTextContent('No time columns');
   });
 
-  it('should handle quarterly filter', () => {
-    render(<DateFilterPlugin {...defaultProps} formData={{ ...defaultProps.formData, quarterFilter: true }} />);
-    const datepicker = screen.getByTestId('datepicker');
-    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-03-31' } });
+  it('should handle change in selection', () => {
+    render(<PluginFilterTimeColumn {...defaultProps} />);
+    fireEvent.change(screen.getByTestId('select'), { target: { value: 'time_col2' } });
     expect(mockSetDataMask).toHaveBeenCalledWith({
-      extraFormData: { time_range: '2023-01-01 : 2023-03-31' },
-      filterState: { value: '2023-01-01 : 2023-03-31' },
-    });
-  });
-
-  it('should handle yearly filter', () => {
-    render(<DateFilterPlugin {...defaultProps} formData={{ ...defaultProps.formData, yearlyFilter: true }} />);
-    const datepicker = screen.getByTestId('datepicker');
-    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-12-31' } });
-    expect(mockSetDataMask).toHaveBeenCalledWith({
-      extraFormData: { time_range: '2023-01-01 : 2023-12-31' },
-      filterState: { value: '2023-01-01 : 2023-12-31' },
+      extraFormData: { granularity_sqla: 'time_col2' },
+      filterState: { value: ['time_col2'] },
     });
   });
 
   it('should handle filterState value change', () => {
-    const { rerender } = render(<DateFilterPlugin {...defaultProps} />);
-    const datepicker = screen.getByTestId('datepicker');
-    expect(datepicker).toHaveValue('');
-
-    rerender(<DateFilterPlugin {...defaultProps} filterState={{ value: '2023-01-01 : 2023-01-31' }} />);
-    expect(datepicker).toHaveValue('2023-01-01 : 2023-01-31');
+    const { rerender } = render(<PluginFilterTimeColumn {...defaultProps} />);
+    expect(screen.getByTestId('select').value).toBe('time_col1');
+    
+    rerender(<PluginFilterTimeColumn {...defaultProps} filterState={{ value: ['time_col2'] }} />);
+    expect(screen.getByTestId('select').value).toBe('time_col2');
   });
 });
