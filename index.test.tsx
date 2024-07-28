@@ -1,130 +1,108 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-import React, { useState, FunctionComponentElement, ChangeEvent } from 'react';
-import { JsonValue, useTheme } from '@superset-ui/core';
-import ControlHeader, { ControlHeaderProps } from '../ControlHeader';
+// ControlFormItem.test.jsx
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import { useTheme } from '@superset-ui/core';
+import ControlFormItem, { ControlFormItemComponents } from './ControlFormItem';
+import ControlHeader from '../ControlHeader';
 import InfoTooltipWithTrigger from '../InfoTooltipWithTrigger';
-import { ControlFormItemComponents, ControlFormItemSpec } from './controls';
 
-export * from './controls';
+// Mock necessary modules
+jest.mock('@superset-ui/core', () => ({
+  useTheme: jest.fn(),
+}));
 
-export type ControlFormItemProps = ControlFormItemSpec & {
-  name: string;
-  onChange?: (fieldValue: JsonValue) => void;
-  cols: any;
-};
+jest.mock('../ControlHeader', () => jest.fn(() => <div>ControlHeader</div>));
+jest.mock('../InfoTooltipWithTrigger', () => jest.fn(() => <div>Tooltip</div>));
 
-export type ControlFormItemNode =
-  FunctionComponentElement<ControlFormItemProps>;
+const MockControlComponent = ({ value, onChange }) => (
+  <input
+    data-testid="mock-control"
+    value={value}
+    onChange={e => onChange(e.target.value)}
+  />
+);
 
-/**
- * Accept `false` or `0`, but not empty string.
- */
-function isEmptyValue(value?: JsonValue) {
-  return value == null || value === '';
-}
+ControlFormItemComponents.Checkbox = ({ children, checked, onChange }) => (
+  <div>
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={e => onChange(e)}
+    />
+    {children}
+  </div>
+);
 
-export function ControlFormItem({
-  name,
-  label,
-  description,
-  width,
-  validators,
-  required,
-  onChange,
-  value: initialValue,
-  defaultValue,
-  controlType,
-  cols,
-  ...props
-}: ControlFormItemProps) {
-  const { gridUnit } = useTheme();
-  const [hovered, setHovered] = useState(false);
-  const [value, setValue] = useState(
-    initialValue === undefined ? defaultValue : initialValue,
-  );
-  const [validationErrors, setValidationErrors] =
-    useState<ControlHeaderProps['validationErrors']>();
+ControlFormItemComponents.Select = MockControlComponent;
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement> | JsonValue) => {
-    const fieldValue =
-      e && typeof e === 'object' && 'target' in e
-        ? e.target.type === 'checkbox' || e.target.type === 'radio'
-          ? e.target.checked
-          : e.target.value
-        : e;
-    const errors =
-      (validators
-        ?.map(validator =>
-          !required && isEmptyValue(fieldValue) ? false : validator(fieldValue),
-        )
-        .filter(x => !!x) as string[]) || [];
-    setValidationErrors(errors);
-    setValue(fieldValue);
-    if (errors.length === 0 && onChange) {
-      onChange(fieldValue as JsonValue);
-    }
-  };
+describe('ControlFormItem', () => {
+  beforeEach(() => {
+    useTheme.mockReturnValue({ gridUnit: 4 });
+  });
 
-  const Control = ControlFormItemComponents[controlType];
-  let customProps = {...props};
-  if (controlType === 'Select' && label === 'Tooltip Columns') {
-    let colsData = cols.map((col: any) => [col, col])
-    customProps['options'] = [...colsData];
-  }
-  return (
-    <div
-      css={{
-        margin: 2 * gridUnit,
-        width,
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      {controlType === 'Checkbox' ? (
-        <ControlFormItemComponents.Checkbox
-          checked={value as boolean}
-          onChange={handleChange}
-        >
-          {label}{' '}
-          {hovered && description && (
-            <InfoTooltipWithTrigger tooltip={description} />
-          )}
-        </ControlFormItemComponents.Checkbox>
-      ) :(
-        <>
-          {label && (
-            <ControlHeader
-              name={name}
-              label={label}
-              description={description}
-              validationErrors={validationErrors}
-              hovered={hovered}
-              required={required}
-            />
-          )}
-          {/* @ts-ignore */}
-          <Control {...customProps} value={value} onChange={handleChange} />
-        </>
-      )}
-    </div>
-  );
-}
+  it('renders and handles change for a Checkbox control', () => {
+    const handleChange = jest.fn();
+    render(
+      <ControlFormItem
+        name="test-checkbox"
+        label="Test Checkbox"
+        description="This is a test checkbox"
+        width={200}
+        controlType="Checkbox"
+        initialValue={false}
+        onChange={handleChange}
+      />
+    );
 
-export default ControlFormItem;
+    // Check if ControlHeader and Checkbox are rendered
+    expect(screen.getByText('ControlHeader')).toBeInTheDocument();
+    expect(screen.getByText('Test Checkbox')).toBeInTheDocument();
+
+    const checkbox = screen.getByRole('checkbox');
+    fireEvent.click(checkbox);
+
+    expect(handleChange).toHaveBeenCalledWith(true);
+  });
+
+  it('renders and handles change for a Select control', () => {
+    const handleChange = jest.fn();
+    render(
+      <ControlFormItem
+        name="test-select"
+        label="Test Select"
+        description="This is a test select"
+        width={200}
+        controlType="Select"
+        initialValue="initial"
+        onChange={handleChange}
+        cols={['Option 1', 'Option 2']}
+      />
+    );
+
+    // Check if ControlHeader and Select are rendered
+    expect(screen.getByText('ControlHeader')).toBeInTheDocument();
+    const input = screen.getByTestId('mock-control');
+    fireEvent.change(input, { target: { value: 'changed' } });
+
+    expect(handleChange).toHaveBeenCalledWith('changed');
+  });
+
+  it('renders InfoTooltipWithTrigger on hover', () => {
+    render(
+      <ControlFormItem
+        name="test-tooltip"
+        label="Test Tooltip"
+        description="This is a tooltip"
+        width={200}
+        controlType="Checkbox"
+        initialValue={false}
+      />
+    );
+
+    const checkboxLabel = screen.getByText('Test Checkbox');
+    fireEvent.mouseEnter(checkboxLabel);
+
+    expect(screen.getByText('Tooltip')).toBeInTheDocument();
+  });
+});
