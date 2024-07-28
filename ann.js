@@ -1,8 +1,39 @@
-describe('parseAnnotationOpacity', () => {
-  it('should return the correct opacity values', () => {
-    expect(parseAnnotationOpacity(AnnotationOpacity.Low)).toBe(0.2);
-    expect(parseAnnotationOpacity(AnnotationOpacity.Medium)).toBe(0.5);
-    expect(parseAnnotationOpacity(AnnotationOpacity.High)).toBe(0.8);
-    expect(parseAnnotationOpacity(null)).toBe(1);
+jest.mock('@superset-ui/core', () => ({
+  isRecordAnnotationResult: jest.fn(),
+  isTableAnnotationLayer: jest.fn(),
+}));
+
+describe('extractRecordAnnotations', () => {
+  it('should extract record annotations correctly', () => {
+    isRecordAnnotationResult.mockReturnValue(true);
+    isTableAnnotationLayer.mockReturnValue(true);
+
+    const annotationLayer = { name: 'testLayer' };
+    const annotationData = {
+      testLayer: {
+        records: [
+          { long_descr: 'desc1', end_dttm: 'end1', start_dttm: 'start1', short_descr: 'title1' },
+        ],
+      },
+    };
+
+    const result = extractRecordAnnotations(annotationLayer, annotationData);
+
+    expect(result).toEqual([
+      {
+        descriptions: ['desc1'],
+        intervalEnd: 'end1',
+        time: 'start1',
+        title: 'title1',
+      },
+    ]);
+  });
+
+  it('should throw an error if the annotation result is not valid', () => {
+    isRecordAnnotationResult.mockReturnValue(false);
+
+    expect(() => {
+      extractRecordAnnotations({}, {});
+    }).toThrow('Please rerun the query.');
   });
 });
