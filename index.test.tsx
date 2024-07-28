@@ -1,129 +1,109 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-import { styled } from '@superset-ui/core';
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { PluginFilterTimeProps } from './types';
-import { FilterPluginStyle } from '../common';
-import { RangePicker } from 'src/components/DatePicker';
-import moment, { Moment } from 'moment';
-import {
-  MOMENT_FORMAT,
-} from 'src/explore/components/controls/DateFilterControl/utils';
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import DateFilterPlugin from './DateFilterPlugin';
+import { styled, t, tn } from '@superset-ui/core';
+import moment from 'moment';
 
-const TimeFilterStyles = styled(FilterPluginStyle)`
-  overflow-x: auto;
-`;
+// Mock the dependencies
+jest.mock('@superset-ui/core', () => ({
+  styled: jest.fn().mockImplementation((component) => component),
+  t: jest.fn((str) => str),
+  tn: jest.fn((str, strPlural, count) => (count > 1 ? strPlural : str)),
+}));
 
-export default function DateFilterPlugin(props: PluginFilterTimeProps) {
-  const {
-    setDataMask,
-    width,
-    height,
-    filterState,
-  } = props;
-
-  const { enableTime, monthlyFilter, quarterFilter, yearlyFilter, customDateFormat, displayDateFormat, displayTimeFormat, timeWith12hoursFormat } = props?.formData
-
-  const handleTimeRangeChange = useCallback(
-    (timeRange: any, dates: any): void => {
-      let isSet = '';
-      if (dates && dates.length === 2) {
-        if (monthlyFilter === true) {
-          let minDate = dates?.[0];
-          let maxDate = dates?.[1];
-          let minYear = moment(minDate, displayDateFormat).format('YYYY');
-          let minMonth = moment(minDate, displayDateFormat).format('MM');
-          minDate = moment(`01-${minMonth}-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
-
-          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
-          let maxMonth = moment(maxDate, displayDateFormat).format('MM');
-          maxDate = moment(`${moment(maxDate, displayDateFormat).endOf('month').format('D')}-${maxMonth}-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`
-        } else if (quarterFilter === true) {
-          let minDate = dates?.[0];
-          let maxDate = dates?.[1];
-          let minYear = moment(minDate, displayDateFormat).format('YYYY');
-          let minMonth = moment(minDate, displayDateFormat).startOf('quarter').format('MM');
-          minDate = moment(`01-${minMonth}-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
-
-          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
-          let maxMonth = moment(maxDate, displayDateFormat).endOf('quarter').format('MM');
-          let maxDay = moment(maxDate, displayDateFormat).endOf('quarter').format('D');
-          maxDate = moment(`${maxDay}-${maxMonth}-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`;
-        } else if (yearlyFilter === true) {
-          let minDate = dates?.[0];
-          let maxDate = dates?.[1];
-          let minYear = moment(minDate, displayDateFormat).format('YYYY');
-          minDate = moment(`01-01-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
-          maxDate = moment(`31-12-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`;
-        } else {
-          let minDate = moment(dates?.[0], displayDateFormat).format(customDateFormat);
-          let maxDate = moment(dates?.[1], displayDateFormat).format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`;
-        }
-      }
-      updateDataMask(isSet);
-    },
-    [setDataMask],
-  );
-
-  const updateDataMask = (isSet: any) => {
-    setDataMask({
-      extraFormData: isSet
-        ? {
-            time_range: isSet,
-          }
-        : {},
-      filterState: {
-        value: isSet ? isSet : undefined,
-      },
-    });
-  }
-
-  useEffect(() => {
-    updateDataMask(filterState?.value);
-  }, [filterState?.value]);
-
-  const momentValue = useMemo((): [Moment, Moment] | null => {
-    let value = filterState?.value;
-    if (value && value.includes(' : ')) {
-      value = value.split(' : ');
-      return [moment(value[0]), moment(value[1])];
-    }
-    return null;
-  }, [filterState?.value]);
-
-  return props.formData?.inView ? (
-    // @ts-ignore
-    <TimeFilterStyles width={width} height={height}>
-      <RangePicker
-        allowClear={false}
-        format={displayDateFormat ? displayDateFormat : (enableTime === true ? MOMENT_FORMAT : 'YYYY-MM-DD')}
-        onChange={handleTimeRangeChange}
-        showTime={enableTime === true ? { format: displayTimeFormat }: false}
-        use12Hours={(enableTime == true && timeWith12hoursFormat === true) ? true : false}
-        value={momentValue}
-        picker={monthlyFilter === true ? 'month' : quarterFilter === true ? 'quarter' : yearlyFilter === true ? 'year' : undefined}
+jest.mock('src/components/DatePicker', () => ({
+  RangePicker: ({ onChange, value, picker }) => (
+    <div>
+      <input
+        data-testid="datepicker"
+        type="text"
+        value={value ? `${value[0].format('YYYY-MM-DD')} : ${value[1].format('YYYY-MM-DD')}` : ''}
+        onChange={(e) => {
+          const [start, end] = e.target.value.split(' : ');
+          onChange([moment(start), moment(end)], [start, end]);
+        }}
       />
-    </TimeFilterStyles>
-  ) : null;
-}
+      {picker && <div data-testid="picker">{picker}</div>}
+    </div>
+  ),
+}));
+
+describe('DateFilterPlugin', () => {
+  const mockSetDataMask = jest.fn();
+
+  const defaultProps = {
+    setDataMask: mockSetDataMask,
+    width: 400,
+    height: 400,
+    filterState: {},
+    formData: {
+      enableTime: false,
+      monthlyFilter: false,
+      quarterFilter: false,
+      yearlyFilter: false,
+      customDateFormat: 'YYYY-MM-DD',
+      displayDateFormat: 'YYYY-MM-DD',
+      displayTimeFormat: 'HH:mm:ss',
+      timeWith12hoursFormat: false,
+      inView: true,
+    },
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should render the component', () => {
+    render(<DateFilterPlugin {...defaultProps} />);
+    expect(screen.getByTestId('datepicker')).toBeInTheDocument();
+  });
+
+  it('should handle date range change', () => {
+    render(<DateFilterPlugin {...defaultProps} />);
+    const datepicker = screen.getByTestId('datepicker');
+    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-01-31' } });
+    expect(mockSetDataMask).toHaveBeenCalledWith({
+      extraFormData: { time_range: '2023-01-01 : 2023-01-31' },
+      filterState: { value: '2023-01-01 : 2023-01-31' },
+    });
+  });
+
+  it('should handle monthly filter', () => {
+    render(<DateFilterPlugin {...defaultProps} formData={{ ...defaultProps.formData, monthlyFilter: true }} />);
+    const datepicker = screen.getByTestId('datepicker');
+    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-01-31' } });
+    expect(mockSetDataMask).toHaveBeenCalledWith({
+      extraFormData: { time_range: '2023-01-01 : 2023-01-31' },
+      filterState: { value: '2023-01-01 : 2023-01-31' },
+    });
+  });
+
+  it('should handle quarterly filter', () => {
+    render(<DateFilterPlugin {...defaultProps} formData={{ ...defaultProps.formData, quarterFilter: true }} />);
+    const datepicker = screen.getByTestId('datepicker');
+    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-03-31' } });
+    expect(mockSetDataMask).toHaveBeenCalledWith({
+      extraFormData: { time_range: '2023-01-01 : 2023-03-31' },
+      filterState: { value: '2023-01-01 : 2023-03-31' },
+    });
+  });
+
+  it('should handle yearly filter', () => {
+    render(<DateFilterPlugin {...defaultProps} formData={{ ...defaultProps.formData, yearlyFilter: true }} />);
+    const datepicker = screen.getByTestId('datepicker');
+    fireEvent.change(datepicker, { target: { value: '2023-01-01 : 2023-12-31' } });
+    expect(mockSetDataMask).toHaveBeenCalledWith({
+      extraFormData: { time_range: '2023-01-01 : 2023-12-31' },
+      filterState: { value: '2023-01-01 : 2023-12-31' },
+    });
+  });
+
+  it('should handle filterState value change', () => {
+    const { rerender } = render(<DateFilterPlugin {...defaultProps} />);
+    const datepicker = screen.getByTestId('datepicker');
+    expect(datepicker).toHaveValue('');
+
+    rerender(<DateFilterPlugin {...defaultProps} filterState={{ value: '2023-01-01 : 2023-01-31' }} />);
+    expect(datepicker).toHaveValue('2023-01-01 : 2023-01-31');
+  });
+});
