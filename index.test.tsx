@@ -1,92 +1,97 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
-import { t } from '@superset-ui/core';
-import ScheduleQueryButton from './ScheduleQueryButton';
+/* eslint-disable no-underscore-dangle */
 
-// Mock necessary modules
-jest.mock('@superset-ui/core', () => ({
-  t: jest.fn().mockImplementation(str => str),
-  styled: jest.fn().mockImplementation(component => component),
-}));
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import { AnnotationOpacity, AnnotationType, isRecordAnnotationResult, isTableAnnotationLayer, isTimeseriesAnnotationResult } from '@superset-ui/core';
+import { parse as mathjsParse } from 'mathjs';
+export function evalFormula(formula, data) {
+  const {
+    value
+  } = formula;
+  const node = mathjsParse(value);
+  const func = node.compile();
+  return data.map(row => [new Date(Number(row.__timestamp)), func.evaluate({
+    x: row.__timestamp
+  })]);
+}
+export function parseAnnotationOpacity(opacity) {
+  switch (opacity) {
+    case AnnotationOpacity.Low:
+      return 0.2;
 
-jest.mock('chrono-node', () => ({
-  parseDate: jest.fn().mockReturnValue(new Date().toISOString()),
-}));
+    case AnnotationOpacity.Medium:
+      return 0.5;
 
-jest.mock('src/components/ModalTrigger', () => {
-  return jest.fn(({ triggerNode, modalBody }) => (
-    <div>
-      {triggerNode}
-      {modalBody}
-    </div>
-  ));
-});
+    case AnnotationOpacity.High:
+      return 0.8;
 
-jest.mock('src/components/Input', () => ({
-  Input: ({ value, onChange }) => (
-    <input value={value} onChange={onChange} data-testid="input" />
-  ),
-  TextArea: ({ value, onChange }) => (
-    <textarea value={value} onChange={onChange} data-testid="textarea" />
-  ),
-}));
+    default:
+      return 1;
+  }
+}
+const NATIVE_COLUMN_NAMES = {
+  descriptionColumns: ['long_descr'],
+  intervalEndColumn: 'end_dttm',
+  timeColumn: 'start_dttm',
+  titleColumn: 'short_descr'
+};
+export function extractRecordAnnotations(annotationLayer, annotationData) {
+  const {
+    name
+  } = annotationLayer;
+  const result = annotationData[name];
 
-describe('ScheduleQueryButton', () => {
-  const mockProps = {
-    defaultLabel: 'Test Label',
-    sql: 'SELECT * FROM table',
-    schema: 'public',
-    dbId: 1,
-    onSchedule: jest.fn(),
-    scheduleQueryWarning: 'Warning message',
-    tooltip: 'Tooltip message',
-    disabled: false,
-  };
+  if (isRecordAnnotationResult(result)) {
+    const {
+      records
+    } = result;
+    const {
+      descriptionColumns = [],
+      intervalEndColumn = '',
+      timeColumn = '',
+      titleColumn = ''
+    } = isTableAnnotationLayer(annotationLayer) ? annotationLayer : NATIVE_COLUMN_NAMES;
+    return records.map(record => ({
+      descriptions: descriptionColumns.map(column => record[column] || ''),
+      intervalEnd: record[intervalEndColumn] || '',
+      time: record[timeColumn] || '',
+      title: record[titleColumn] || ''
+    }));
+  }
 
-  it('renders the ScheduleQueryButton with default props', () => {
-    render(<ScheduleQueryButton {...mockProps} />);
-    expect(screen.getByText('Schedule')).toBeInTheDocument();
+  throw new Error('Please rerun the query.');
+}
+export function formatAnnotationLabel(name, title, descriptions = []) {
+  const labels = [];
+  const titleLabels = [];
+  const filteredDescriptions = descriptions.filter(description => !!description);
+  if (name) titleLabels.push(name);
+  if (title) titleLabels.push(title);
+  if (titleLabels.length > 0) labels.push(titleLabels.join(' - '));
+  if (filteredDescriptions.length > 0) labels.push(filteredDescriptions.join('\n'));
+  return labels.join('\n\n');
+}
+export function extractAnnotationLabels(layers, data) {
+  const formulaAnnotationLabels = layers.filter(anno => anno.annotationType === AnnotationType.Formula && anno.show).map(anno => anno.name);
+  const timeseriesAnnotationLabels = layers.filter(anno => anno.annotationType === AnnotationType.Timeseries && anno.show).flatMap(anno => {
+    const result = data[anno.name];
+    return isTimeseriesAnnotationResult(result) ? result.map(annoSeries => annoSeries.key) : [];
   });
-
-  it('opens the modal when Schedule button is clicked', () => {
-    render(<ScheduleQueryButton {...mockProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
-    expect(screen.getByPlaceholderText('Label for your query')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Write a description for your query')).toBeInTheDocument();
-  });
-
-  it('submits the form with the correct values', () => {
-    render(<ScheduleQueryButton {...mockProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
-
-    fireEvent.change(screen.getByPlaceholderText('Label for your query'), {
-      target: { value: 'New Label' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('Write a description for your query'), {
-      target: { value: 'New Description' },
-    });
-
-    fireEvent.click(screen.getByText('Submit'));
-
-    expect(mockProps.onSchedule).toHaveBeenCalledWith({
-      label: 'New Label',
-      description: 'New Description',
-      db_id: 1,
-      schema: 'public',
-      sql: 'SELECT * FROM table',
-      extra_json: expect.any(String),
-    });
-  });
-
-  it('displays the schedule query warning', () => {
-    render(<ScheduleQueryButton {...mockProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
-    expect(screen.getByText('Warning message')).toBeInTheDocument();
-  });
-
-  it('disables the button when disabled prop is true', () => {
-    render(<ScheduleQueryButton {...mockProps} disabled />);
-    expect(screen.getByText('Schedule')).toBeDisabled();
-  });
-});
+  return formulaAnnotationLabels.concat(timeseriesAnnotationLabels);
+}
