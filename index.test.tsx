@@ -1,110 +1,92 @@
-// ControlForm.test.jsx
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/extend-expect';
-import { useTheme } from '@superset-ui/core';
-import ControlForm, { ControlFormRow } from './ControlForm';
-import ControlFormItem from './ControlFormItem';
+import { t } from '@superset-ui/core';
+import ScheduleQueryButton from './ScheduleQueryButton';
 
 // Mock necessary modules
 jest.mock('@superset-ui/core', () => ({
-  useTheme: jest.fn(),
-  FAST_DEBOUNCE: 300,
+  t: jest.fn().mockImplementation(str => str),
+  styled: jest.fn().mockImplementation(component => component),
 }));
 
-const mockTheme = {
-  gridUnit: 4,
-  colors: {
-    text: {
-      label: 'black',
-    },
-  },
-  typography: {
-    sizes: {
-      s: '12px',
-    },
-  },
-};
+jest.mock('chrono-node', () => ({
+  parseDate: jest.fn().mockReturnValue(new Date().toISOString()),
+}));
 
-const MockControlFormItem = ({ name, value, onChange }) => (
-  <input
-    data-testid={name}
-    value={value}
-    onChange={e => onChange(e.target.value)}
-  />
-);
+jest.mock('src/components/ModalTrigger', () => {
+  return jest.fn(({ triggerNode, modalBody }) => (
+    <div>
+      {triggerNode}
+      {modalBody}
+    </div>
+  ));
+});
 
-jest.mock('./ControlFormItem', () => jest.fn(MockControlFormItem));
+jest.mock('src/components/Input', () => ({
+  Input: ({ value, onChange }) => (
+    <input value={value} onChange={onChange} data-testid="input" />
+  ),
+  TextArea: ({ value, onChange }) => (
+    <textarea value={value} onChange={onChange} data-testid="textarea" />
+  ),
+}));
 
-describe('ControlForm', () => {
-  beforeEach(() => {
-    useTheme.mockReturnValue(mockTheme);
+describe('ScheduleQueryButton', () => {
+  const mockProps = {
+    defaultLabel: 'Test Label',
+    sql: 'SELECT * FROM table',
+    schema: 'public',
+    dbId: 1,
+    onSchedule: jest.fn(),
+    scheduleQueryWarning: 'Warning message',
+    tooltip: 'Tooltip message',
+    disabled: false,
+  };
+
+  it('renders the ScheduleQueryButton with default props', () => {
+    render(<ScheduleQueryButton {...mockProps} />);
+    expect(screen.getByText('Schedule')).toBeInTheDocument();
   });
 
-  it('renders ControlForm with ControlFormRow and ControlFormItem', () => {
-    const handleChange = jest.fn();
-    const initialValue = { field1: 'value1', field2: 'value2' };
-
-    render(
-      <ControlForm onChange={handleChange} value={initialValue}>
-        <ControlFormRow>
-          <ControlFormItem name="field1" />
-          <ControlFormItem name="field2" />
-        </ControlFormRow>
-      </ControlForm>
-    );
-
-    // Check if the ControlFormItem inputs are rendered with the correct values
-    const input1 = screen.getByTestId('field1');
-    const input2 = screen.getByTestId('field2');
-    expect(input1).toHaveValue('value1');
-    expect(input2).toHaveValue('value2');
+  it('opens the modal when Schedule button is clicked', () => {
+    render(<ScheduleQueryButton {...mockProps} />);
+    fireEvent.click(screen.getByText('Schedule'));
+    expect(screen.getByPlaceholderText('Label for your query')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Write a description for your query')).toBeInTheDocument();
   });
 
-  it('handles change events for ControlFormItem components', () => {
-    const handleChange = jest.fn();
-    const initialValue = { field1: 'value1', field2: 'value2' };
+  it('submits the form with the correct values', () => {
+    render(<ScheduleQueryButton {...mockProps} />);
+    fireEvent.click(screen.getByText('Schedule'));
 
-    render(
-      <ControlForm onChange={handleChange} value={initialValue}>
-        <ControlFormRow>
-          <ControlFormItem name="field1" />
-          <ControlFormItem name="field2" />
-        </ControlFormRow>
-      </ControlForm>
-    );
-
-    // Simulate change events on the inputs
-    const input1 = screen.getByTestId('field1');
-    const input2 = screen.getByTestId('field2');
-    fireEvent.change(input1, { target: { value: 'newValue1' } });
-    fireEvent.change(input2, { target: { value: 'newValue2' } });
-
-    // Check if handleChange is called with the correct values
-    expect(handleChange).toHaveBeenCalledWith({
-      field1: 'newValue1',
-      field2: 'value2',
+    fireEvent.change(screen.getByPlaceholderText('Label for your query'), {
+      target: { value: 'New Label' },
     });
-    expect(handleChange).toHaveBeenCalledWith({
-      field1: 'newValue1',
-      field2: 'newValue2',
+    fireEvent.change(screen.getByPlaceholderText('Write a description for your query'), {
+      target: { value: 'New Description' },
+    });
+
+    fireEvent.click(screen.getByText('Submit'));
+
+    expect(mockProps.onSchedule).toHaveBeenCalledWith({
+      label: 'New Label',
+      description: 'New Description',
+      db_id: 1,
+      schema: 'public',
+      sql: 'SELECT * FROM table',
+      extra_json: expect.any(String),
     });
   });
 
-  it('renders ControlFormRow with correct styling', () => {
-    render(
-      <ControlForm onChange={jest.fn()} value={{}}>
-        <ControlFormRow>
-          <ControlFormItem name="field1" />
-          <ControlFormItem name="field2" />
-        </ControlFormRow>
-      </ControlForm>
-    );
+  it('displays the schedule query warning', () => {
+    render(<ScheduleQueryButton {...mockProps} />);
+    fireEvent.click(screen.getByText('Schedule'));
+    expect(screen.getByText('Warning message')).toBeInTheDocument();
+  });
 
-    const controlFormRow = screen.getByTestId('control-form-row');
-    expect(controlFormRow).toHaveStyle('display: flex');
-    expect(controlFormRow).toHaveStyle('flex-wrap: nowrap');
-    expect(controlFormRow).toHaveStyle('margin: -8px');
-    expect(controlFormRow).toHaveStyle('margin-bottom: 4px');
+  it('disables the button when disabled prop is true', () => {
+    render(<ScheduleQueryButton {...mockProps} disabled />);
+    expect(screen.getByText('Schedule')).toBeDisabled();
   });
 });
