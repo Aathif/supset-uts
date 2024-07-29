@@ -68,4 +68,16 @@ describe('transformProps', () => {
       data: [
         { metric1: 100, metric2: 200 },
         { metric1: 150, metric2: 250 },
-     
+      ],
+      country: null,
+      linearColorScheme: 'schemeBlues',
+      numberFormat: '.2f',
+      colorScheme: 'd3Category10',
+      sliceId: 123,
+    };
+
+    const result = transformProps(chartProps);
+
+    expect(result).toEqual(expectedTransformedProps);
+  });
+});
