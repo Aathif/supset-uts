@@ -6,7 +6,9 @@ describe('transformProps', () => {
       width: 800,
       height: 600,
       formData: {
-        yAxisFormat: '.2f',
+        linearColorScheme: 'schemeBlues',
+        numberFormat: '.2f',
+        selectCountry: 'US',
         colorScheme: 'd3Category10',
         sliceId: 123,
       },
@@ -21,14 +23,16 @@ describe('transformProps', () => {
     };
 
     const expectedTransformedProps = {
-      colorScheme: 'd3Category10',
+      width: 800,
+      height: 600,
       data: [
         { metric1: 100, metric2: 200 },
         { metric1: 150, metric2: 250 },
       ],
-      height: 600,
+      country: 'us',
+      linearColorScheme: 'schemeBlues',
       numberFormat: '.2f',
-      width: 800,
+      colorScheme: 'd3Category10',
       sliceId: 123,
     };
 
@@ -36,4 +40,32 @@ describe('transformProps', () => {
 
     expect(result).toEqual(expectedTransformedProps);
   });
-});
+
+  it('should handle missing selectCountry correctly', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        linearColorScheme: 'schemeBlues',
+        numberFormat: '.2f',
+        selectCountry: null,
+        colorScheme: 'd3Category10',
+        sliceId: 123,
+      },
+      queriesData: [
+        {
+          data: [
+            { metric1: 100, metric2: 200 },
+            { metric1: 150, metric2: 250 },
+          ],
+        },
+      ],
+    };
+
+    const expectedTransformedProps = {
+      width: 800,
+      height: 600,
+      data: [
+        { metric1: 100, metric2: 200 },
+        { metric1: 150, metric2: 250 },
+     
