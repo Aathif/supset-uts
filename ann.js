@@ -1,78 +1,53 @@
-import getScrollBarSize from './getScrollBarSize';
+import { Row } from 'react-table';
+import { sortAlphanumericCaseInsensitive } from './sortAlphanumericCaseInsensitive';
 
-describe('getScrollBarSize', () => {
-  beforeEach(() => {
-    jest.resetModules(); // Clear cached module to reset the cache
+describe('sortAlphanumericCaseInsensitive', () => {
+  const createRow = (value) => ({
+    values: {
+      testColumn: value,
+    },
   });
 
-  it('should return 0 when document is undefined', () => {
-    const originalDocument = global.document;
-    delete global.document;
-    expect(getScrollBarSize()).toBe(0);
-    global.document = originalDocument;
+  it('should sort strings alphabetically in a case-insensitive manner', () => {
+    const rowA = createRow('apple');
+    const rowB = createRow('Banana');
+    expect(sortAlphanumericCaseInsensitive(rowA, rowB, 'testColumn')).toBeLessThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowB, rowA, 'testColumn')).toBeGreaterThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowA, rowA, 'testColumn')).toBe(0);
   });
 
-  it('should calculate and cache the scrollbar size', () => {
-    // Mock the document to simulate browser environment
-    document.body.innerHTML = ''; // Reset body
+  it('should handle non-string values by placing them at the end', () => {
+    const rowA = createRow('apple');
+    const rowB = createRow(null);
+    const rowC = createRow(undefined);
+    const rowD = createRow(123);
 
-    const div = document.createElement('div');
-    div.style.width = '100px';
-    div.style.height = '50px';
-    div.style.overflow = 'hidden';
-    document.body.append(div);
-
-    const scrollbarSize = getScrollBarSize(true);
-    expect(scrollbarSize).toBeGreaterThan(0);
-
-    const cachedScrollbarSize = getScrollBarSize();
-    expect(cachedScrollbarSize).toBe(scrollbarSize);
-
-    div.remove();
+    expect(sortAlphanumericCaseInsensitive(rowA, rowB, 'testColumn')).toBeGreaterThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowA, rowC, 'testColumn')).toBeGreaterThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowA, rowD, 'testColumn')).toBeLessThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowB, rowC, 'testColumn')).toBe(0);
+    expect(sortAlphanumericCaseInsensitive(rowB, rowD, 'testColumn')).toBe(-1);
+    expect(sortAlphanumericCaseInsensitive(rowC, rowD, 'testColumn')).toBe(-1);
   });
 
-  it('should refresh the scrollbar size when forceRefresh is true', () => {
-    // Mock the document to simulate browser environment
-    document.body.innerHTML = ''; // Reset body
+  it('should sort strings with different cases correctly', () => {
+    const rowA = createRow('apple');
+    const rowB = createRow('Apple');
+    const rowC = createRow('Banana');
+    const rowD = createRow('banana');
 
-    const div = document.createElement('div');
-    div.style.width = '100px';
-    div.style.height = '50px';
-    div.style.overflow = 'hidden';
-    document.body.append(div);
-
-    const initialScrollbarSize = getScrollBarSize(true);
-    expect(initialScrollbarSize).toBeGreaterThan(0);
-
-    // Simulate a change in the scrollbar size
-    const newDiv = document.createElement('div');
-    newDiv.style.width = '200px';
-    newDiv.style.height = '100px';
-    newDiv.style.overflow = 'hidden';
-    document.body.append(newDiv);
-
-    const refreshedScrollbarSize = getScrollBarSize(true);
-    expect(refreshedScrollbarSize).not.toBe(initialScrollbarSize);
-
-    newDiv.remove();
+    expect(sortAlphanumericCaseInsensitive(rowA, rowB, 'testColumn')).toBe(0);
+    expect(sortAlphanumericCaseInsensitive(rowB, rowC, 'testColumn')).toBeLessThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowC, rowD, 'testColumn')).toBe(0);
   });
 
-  it('should not recalculate the scrollbar size when it is cached', () => {
-    // Mock the document to simulate browser environment
-    document.body.innerHTML = ''; // Reset body
+  it('should handle empty strings correctly', () => {
+    const rowA = createRow('');
+    const rowB = createRow('Banana');
+    const rowC = createRow('');
 
-    const div = document.createElement('div');
-    div.style.width = '100px';
-    div.style.height = '50px';
-    div.style.overflow = 'hidden';
-    document.body.append(div);
-
-    const scrollbarSize = getScrollBarSize(true);
-    expect(scrollbarSize).toBeGreaterThan(0);
-
-    const cachedScrollbarSize = getScrollBarSize();
-    expect(cachedScrollbarSize).toBe(scrollbarSize);
-
-    div.remove();
+    expect(sortAlphanumericCaseInsensitive(rowA, rowB, 'testColumn')).toBeLessThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowB, rowA, 'testColumn')).toBeGreaterThan(0);
+    expect(sortAlphanumericCaseInsensitive(rowA, rowC, 'testColumn')).toBe(0);
   });
 });
