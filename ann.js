@@ -1,121 +1,38 @@
-import transformProps from './transformProps';
-import { ChartProps } from '@superset-ui/core';
+import { unitToRadius, Unit } from './unitToRadius';
 
-describe('transformProps', () => {
-  it('should transform chart properties correctly', () => {
-    const chartProps: ChartProps = {
-      datasource: {
-        columnFormats: {},
-        verboseMap: {},
-      },
-      height: 600,
-      hooks: {
-        onAddFilter: jest.fn(),
-        setControlValue: jest.fn(),
-      },
-      queriesData: [
-        {
-          data: [
-            { name: 'Alice', value: 1 },
-            { name: 'Bob', value: 2 },
-          ],
-        },
-      ],
-      rawFormData: {
-        viewport: {
-          latitude: 37.7749,
-          longitude: -122.4194,
-          zoom: 10,
-        },
-      },
-      width: 800,
-    };
-
-    const expectedProps = {
-      datasource: {
-        columnFormats: {},
-        verboseMap: {},
-      },
-      formData: {
-        viewport: {
-          latitude: 37.7749,
-          longitude: -122.4194,
-          zoom: 10,
-        },
-      },
-      height: 600,
-      onAddFilter: chartProps.hooks.onAddFilter,
-      payload: chartProps.queriesData[0],
-      setControlValue: chartProps.hooks.setControlValue,
-      viewport: {
-        latitude: 37.7749,
-        longitude: -122.4194,
-        zoom: 10,
-        height: 600,
-        width: 800,
-      },
-      width: 800,
-    };
-
-    expect(transformProps(chartProps)).toEqual(expectedProps);
+describe('unitToRadius', () => {
+  it('should convert square meters to radius in meters', () => {
+    const result = unitToRadius('square_m', 314159);
+    expect(result).toBeCloseTo(316.22, 2);
   });
 
-  it('should use NOOP for hooks if not provided', () => {
-    const chartProps: ChartProps = {
-      datasource: {
-        columnFormats: {},
-        verboseMap: {},
-      },
-      height: 600,
-      hooks: {},
-      queriesData: [
-        {
-          data: [
-            { name: 'Alice', value: 1 },
-            { name: 'Bob', value: 2 },
-          ],
-        },
-      ],
-      rawFormData: {
-        viewport: {
-          latitude: 37.7749,
-          longitude: -122.4194,
-          zoom: 10,
-        },
-      },
-      width: 800,
-    };
+  it('should convert radius in meters to radius in meters', () => {
+    const result = unitToRadius('radius_m', 1000);
+    expect(result).toBe(1000);
+  });
 
-    const expectedProps = {
-      datasource: {
-        columnFormats: {},
-        verboseMap: {},
-      },
-      formData: {
-        viewport: {
-          latitude: 37.7749,
-          longitude: -122.4194,
-          zoom: 10,
-        },
-      },
-      height: 600,
-      onAddFilter: expect.any(Function),
-      payload: chartProps.queriesData[0],
-      setControlValue: expect.any(Function),
-      viewport: {
-        latitude: 37.7749,
-        longitude: -122.4194,
-        zoom: 10,
-        height: 600,
-        width: 800,
-      },
-      width: 800,
-    };
+  it('should convert radius in kilometers to radius in meters', () => {
+    const result = unitToRadius('radius_km', 1);
+    expect(result).toBe(1000);
+  });
 
-    const transformedProps = transformProps(chartProps);
+  it('should convert radius in miles to radius in meters', () => {
+    const result = unitToRadius('radius_miles', 1);
+    expect(result).toBeCloseTo(1609.34, 2);
+  });
 
-    expect(transformedProps).toEqual(expectedProps);
-    expect(transformedProps.onAddFilter).toBeInstanceOf(Function);
-    expect(transformedProps.setControlValue).toBeInstanceOf(Function);
+  it('should convert square kilometers to radius in meters', () => {
+    const result = unitToRadius('square_km', 314.159);
+    expect(result).toBeCloseTo(10000, 2);
+  });
+
+  it('should convert square miles to radius in meters', () => {
+    const result = unitToRadius('square_miles', 314.159);
+    expect(result).toBeCloseTo(160934, 2);
+  });
+
+  it('should return null for an unknown unit', () => {
+    const result = unitToRadius('unknown_unit' as Unit, 1000);
+    expect(result).toBeNull();
   });
 });
