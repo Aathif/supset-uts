@@ -1,29 +1,60 @@
-import { getTooltipTimeFormatter } from './getTooltipTimeFormatter'; // Adjust the import path as needed
-import { getTimeFormatter } from '@superset-ui/core'; // Adjust import path
-import { smartDateFormatter, smartDateDetailedFormatter } from './path-to-smart-date-formatters'; // Adjust import path
+export function transformTimeseriesAnnotation(layer, markerSize, data, annotationData) {
+  const series = [];
+  const {
+    hideLine,
+    name,
+    opacity,
+    showMarkers,
+    style,
+    width,
+    markLine,
+    markPoint
+  } = layer;
+  const result = annotationData[name];
 
-jest.mock('@superset-ui/core', () => ({
-  getTimeFormatter: jest.fn((format: string) => (value: any) => `Formatted(${value}) with format ${format}`),
-}));
+  if (isTimeseriesAnnotationResult(result)) {
+    result.forEach(annotation => {
+      const {
+        key,
+        values,
+        markLine,
+        markPoint
+      } = annotation;
+      series.push({
+        type: 'line',
+        id: key,
+        name: key,
+        data: values.map(row => [row.x, row.y]),
+        symbolSize: showMarkers ? markerSize : 0,
+        markLine : {
+          data: [{
+            type: "average"
+          }],
+          silent: true
+        },
+        markPoint : {
+          data: [
+            { type: 'max', name: 'Max' },
+            { type: 'min', name: 'Min' }
+          ],
+          symbol: "pin",
+          symbolSize: [45,40],
+          symbolRotate: -180,
+          label: {
+            show: true,
+            distance: 30,
+            position: "inside",
+            offset: [0, 8]
+          }
+        },
+        lineStyle: {
+          opacity: parseAnnotationOpacity(opacity),
+          type: style,
+          width: hideLine ? 0 : width
+        }
+      });
+    });
+  }
 
-describe('getTooltipTimeFormatter', () => {
-  it('should return smartDateDetailedFormatter when format is smartDateFormatter.id', () => {
-    const formatter = getTooltipTimeFormatter(smartDateFormatter.id);
-    expect(formatter).toBe(smartDateDetailedFormatter);
-  });
-
-  it('should return getTimeFormatter when format is a specific format', () => {
-    const format = 'YYYY-MM-DD';
-    const formatter = getTooltipTimeFormatter(format);
-    expect(formatter).toEqual(expect.any(Function));
-    expect(formatter('2024-07-30')).toBe('Formatted(2024-07-30) with format YYYY-MM-DD');
-  });
-
-  it('should return String when format is undefined or empty', () => {
-    const formatterUndefined = getTooltipTimeFormatter(undefined);
-    expect(formatterUndefined).toBe(String);
-
-    const formatterEmpty = getTooltipTimeFormatter('');
-    expect(formatterEmpty).toBe(String);
-  });
-});
+  return series;
+}
