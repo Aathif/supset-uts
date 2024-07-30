@@ -1,64 +1,58 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import Legend, { LegendProps } from './Legend';
-import { formatNumber, styled } from '@superset-ui/core';
+import Tooltip, { TooltipProps } from './Tooltip';
+import { safeHtmlSpan } from '@superset-ui/core';
 
 jest.mock('@superset-ui/core', () => ({
-  formatNumber: jest.fn().mockImplementation((format, value) => value.toString()),
   styled: jest.fn((component) => component),
+  safeHtmlSpan: jest.fn((content) => content),
 }));
 
-describe('Legend Component', () => {
-  const mockToggleCategory = jest.fn();
-  const mockShowSingleCategory = jest.fn();
-
-  const defaultProps: LegendProps = {
-    format: '0.2f',
-    categories: {
-      category1: { enabled: true, color: [255, 0, 0] },
-      category2: { enabled: false, color: [0, 255, 0] },
+describe('Tooltip Component', () => {
+  const defaultProps: TooltipProps = {
+    tooltip: {
+      x: 100,
+      y: 200,
+      content: 'Test tooltip content',
     },
-    toggleCategory: mockToggleCategory,
-    showSingleCategory: mockShowSingleCategory,
   };
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('renders correctly with tooltip content', () => {
+    render(<Tooltip {...defaultProps} />);
+    expect(screen.getByText('Test tooltip content')).toBeInTheDocument();
+    const tooltipDiv = screen.getByText('Test tooltip content').parentElement;
+    expect(tooltipDiv).toHaveStyle({
+      position: 'absolute',
+      top: '200px',
+      left: '100px',
+    });
   });
 
-  it('renders correctly with categories', () => {
-    render(<Legend {...defaultProps} />);
-    expect(screen.getByText(/category1/i)).toBeInTheDocument();
-    expect(screen.getByText(/category2/i)).toBeInTheDocument();
-  });
-
-  it('does not render when there are no categories', () => {
-    const { container } = render(<Legend {...defaultProps} categories={{}} />);
+  it('renders null when tooltip is undefined', () => {
+    const { container } = render(<Tooltip tooltip={undefined} />);
     expect(container.firstChild).toBeNull();
   });
 
-  it('calls toggleCategory when a category is clicked', () => {
-    render(<Legend {...defaultProps} />);
-    const category1 = screen.getByText(/category1/i);
-    fireEvent.click(category1);
-    expect(mockToggleCategory).toHaveBeenCalledWith('category1');
+  it('renders null when tooltip is null', () => {
+    const { container } = render(<Tooltip tooltip={null} />);
+    expect(container.firstChild).toBeNull();
   });
 
-  it('calls showSingleCategory when a category is double-clicked', () => {
-    render(<Legend {...defaultProps} />);
-    const category1 = screen.getByText(/category1/i);
-    fireEvent.doubleClick(category1);
-    expect(mockShowSingleCategory).toHaveBeenCalledWith('category1');
+  it('uses safeHtmlSpan for string content', () => {
+    render(<Tooltip {...defaultProps} />);
+    expect(safeHtmlSpan).toHaveBeenCalledWith('Test tooltip content');
   });
 
-  it('applies correct styles based on position prop', () => {
-    const { rerender } = render(<Legend {...defaultProps} position="tl" />);
-    let legend = screen.getByRole('list').parentElement;
-    expect(legend).toHaveStyle({ top: '0px', left: '10px' });
-
-    rerender(<Legend {...defaultProps} position="br" />);
-    legend = screen.getByRole('list').parentElement;
-    expect(legend).toHaveStyle({ bottom: '0px', right: '10px' });
+  it('renders ReactNode content correctly', () => {
+    const reactNodeContent = <div>ReactNode content</div>;
+    render(<Tooltip tooltip={{ x: 50, y: 50, content: reactNodeContent }} />);
+    expect(screen.getByText('ReactNode content')).toBeInTheDocument();
+    const tooltipDiv = screen.getByText('ReactNode content').parentElement;
+    expect(tooltipDiv).toHaveStyle({
+      position: 'absolute',
+      top: '50px',
+      left: '50px',
+    });
   });
 });
