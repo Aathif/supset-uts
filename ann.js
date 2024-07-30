@@ -1,58 +1,74 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import Tooltip, { TooltipProps } from './Tooltip';
-import { safeHtmlSpan } from '@superset-ui/core';
+import { getLinearDomain } from './getLinearDomain';
 
-jest.mock('@superset-ui/core', () => ({
-  styled: jest.fn((component) => component),
-  safeHtmlSpan: jest.fn((content) => content),
-}));
+interface TreeNode {
+  value: number;
+  children?: TreeNode[];
+}
 
-describe('Tooltip Component', () => {
-  const defaultProps: TooltipProps = {
-    tooltip: {
-      x: 100,
-      y: 200,
-      content: 'Test tooltip content',
-    },
-  };
-
-  it('renders correctly with tooltip content', () => {
-    render(<Tooltip {...defaultProps} />);
-    expect(screen.getByText('Test tooltip content')).toBeInTheDocument();
-    const tooltipDiv = screen.getByText('Test tooltip content').parentElement;
-    expect(tooltipDiv).toHaveStyle({
-      position: 'absolute',
-      top: '200px',
-      left: '100px',
-    });
+describe('getLinearDomain', () => {
+  it('should return the correct min and max for a single node', () => {
+    const treeData: TreeNode[] = [
+      { value: 5 }
+    ];
+    const callback = (node: TreeNode) => node.value;
+    const result = getLinearDomain(treeData, callback);
+    expect(result).toEqual([5, 5]);
   });
 
-  it('renders null when tooltip is undefined', () => {
-    const { container } = render(<Tooltip tooltip={undefined} />);
-    expect(container.firstChild).toBeNull();
+  it('should return the correct min and max for a flat tree', () => {
+    const treeData: TreeNode[] = [
+      { value: 5 },
+      { value: 10 },
+      { value: -3 }
+    ];
+    const callback = (node: TreeNode) => node.value;
+    const result = getLinearDomain(treeData, callback);
+    expect(result).toEqual([-3, 10]);
   });
 
-  it('renders null when tooltip is null', () => {
-    const { container } = render(<Tooltip tooltip={null} />);
-    expect(container.firstChild).toBeNull();
+  it('should return the correct min and max for a nested tree', () => {
+    const treeData: TreeNode[] = [
+      {
+        value: 5,
+        children: [
+          { value: 10 },
+          { value: -3, children: [{ value: 7 }] }
+        ]
+      }
+    ];
+    const callback = (node: TreeNode) => node.value;
+    const result = getLinearDomain(treeData, callback);
+    expect(result).toEqual([-3, 10]);
   });
 
-  it('uses safeHtmlSpan for string content', () => {
-    render(<Tooltip {...defaultProps} />);
-    expect(safeHtmlSpan).toHaveBeenCalledWith('Test tooltip content');
+  it('should handle trees with null values returned by the callback', () => {
+    const treeData: TreeNode[] = [
+      {
+        value: 5,
+        children: [
+          { value: 10 },
+          { value: -3, children: [{ value: 7 }] }
+        ]
+      }
+    ];
+    const callback = (node: TreeNode) => node.value > 5 ? null : node.value;
+    const result = getLinearDomain(treeData, callback);
+    expect(result).toEqual([-3, 5]);
   });
 
-  it('renders ReactNode content correctly', () => {
-    const reactNodeContent = <div>ReactNode content</div>;
-    render(<Tooltip tooltip={{ x: 50, y: 50, content: reactNodeContent }} />);
-    expect(screen.getByText('ReactNode content')).toBeInTheDocument();
-    const tooltipDiv = screen.getByText('ReactNode content').parentElement;
-    expect(tooltipDiv).toHaveStyle({
-      position: 'absolute',
-      top: '50px',
-      left: '50px',
-    });
+  it('should return [0, 0] for an empty tree', () => {
+    const treeData: TreeNode[] = [];
+    const callback = (node: TreeNode) => node.value;
+    const result = getLinearDomain(treeData, callback);
+    expect(result).toEqual([0, 0]);
+  });
+
+  it('should return [0, 0] for a tree where all values are null', () => {
+    const treeData: TreeNode[] = [
+      { value: 1, children: [{ value: 2 }, { value: 3 }] }
+    ];
+    const callback = () => null;
+    const result = getLinearDomain(treeData, callback);
+    expect(result).toEqual([0, 0]);
   });
 });
