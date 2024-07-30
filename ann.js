@@ -1,13 +1,35 @@
-export function getQueryMode(formData) {
-   const {
-     query_mode: mode
-   } = formData;
- 
-   if (mode === QueryMode.Aggregate || mode === QueryMode.Raw) {
-     return mode;
-   }
- 
-   const rawColumns = formData == null ? void 0 : formData.all_columns;
-   const hasRawColumns = rawColumns && rawColumns.length > 0;
-   return hasRawColumns ? QueryMode.Raw : QueryMode.Aggregate;
- }
+// utils.test.js
+import { getQueryMode } from './utils';
+import { QueryMode } from './constants';
+
+describe('getQueryMode', () => {
+  test('returns Aggregate when query_mode is Aggregate', () => {
+    const formData = { query_mode: QueryMode.Aggregate };
+    expect(getQueryMode(formData)).toBe(QueryMode.Aggregate);
+  });
+
+  test('returns Raw when query_mode is Raw', () => {
+    const formData = { query_mode: QueryMode.Raw };
+    expect(getQueryMode(formData)).toBe(QueryMode.Raw);
+  });
+
+  test('returns Raw when query_mode is undefined and all_columns is not empty', () => {
+    const formData = { all_columns: ['col1', 'col2'] };
+    expect(getQueryMode(formData)).toBe(QueryMode.Raw);
+  });
+
+  test('returns Aggregate when query_mode is undefined and all_columns is empty', () => {
+    const formData = { all_columns: [] };
+    expect(getQueryMode(formData)).toBe(QueryMode.Aggregate);
+  });
+
+  test('returns Aggregate when query_mode is undefined and all_columns is not present', () => {
+    const formData = {};
+    expect(getQueryMode(formData)).toBe(QueryMode.Aggregate);
+  });
+
+  test('returns Aggregate when query_mode is not recognized and all_columns is not present', () => {
+    const formData = { query_mode: 'unknown_mode' };
+    expect(getQueryMode(formData)).toBe(QueryMode.Aggregate);
+  });
+});
