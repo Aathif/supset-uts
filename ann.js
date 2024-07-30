@@ -1,126 +1,167 @@
-import { getNumberFormatter, NumberFormats, t } from '@superset-ui/core';
+import {
+  getColtypesMapping,
+  getValueFormatter,
+  getNumberFormatter,
+  getMetricLabel,
+  getTimeFormatter,
+  getSequentialSchemeRegistry,
+  formatSeriesName,
+  treeBuilder,
+  CategoricalColorNamespace,
+  OpacityEnum,
+  EChartsCoreOption,
+  t,
+} from '@superset-ui/core';
 
-// Mocking functions
+// Mocking dependencies
 jest.mock('@superset-ui/core', () => ({
-  getNumberFormatter: jest.fn().mockImplementation(() => (value: number) => `${value}%`),
-  NumberFormats: {
-    PERCENT_2_POINT: '0.00%',
+  getColtypesMapping: jest.fn(),
+  getValueFormatter: jest.fn().mockImplementation(() => (value: number) => `formatted ${value}`),
+  getNumberFormatter: jest.fn().mockImplementation(() => (value: number) => `${value}`),
+  getMetricLabel: jest.fn().mockImplementation(metric => metric),
+  getTimeFormatter: jest.fn().mockImplementation(() => (value: number) => `${value}`),
+  getSequentialSchemeRegistry: jest.fn().mockImplementation(() => ({
+    get: jest.fn().mockImplementation(() => ({
+      createLinearScale: jest.fn().mockImplementation(() => (value: number) => `linear ${value}`),
+    })),
+  })),
+  formatSeriesName: jest.fn().mockImplementation((name, opts) => name),
+  treeBuilder: jest.fn().mockImplementation((data, columnLabels, metricLabel, secondaryMetricLabel) => data),
+  CategoricalColorNamespace: {
+    getScale: jest.fn().mockImplementation(() => (name: string) => name),
   },
-  t: jest.fn().mockImplementation((key: string) => key),
+  OpacityEnum: {
+    SemiTransparent: 0.5,
+  },
+  t: jest.fn().mockImplementation(key => key),
 }));
 
-interface TreeNode {
-  value: number;
-  secondaryValue?: number;
-  name?: string;
-  [key: string]: any;
-}
+describe('transformProps', () => {
+  const chartProps = {
+    formData: {
+      groupby: ['col1'],
+      columns: ['col2'],
+      metric: 'metric1',
+      secondaryMetric: 'metric2',
+      colorScheme: 'scheme1',
+      linearColorScheme: 'linearScheme1',
+      labelType: 'KeyValue',
+      numberFormat: '.2f',
+      currencyFormat: '$',
+      dateFormat: 'YYYY-MM-DD',
+      showLabels: true,
+      showLabelsThreshold: 0.1,
+      showTotal: true,
+      sliceId: 1,
+    },
+    height: 600,
+    hooks: {
+      setDataMask: jest.fn(),
+      onContextMenu: jest.fn(),
+    },
+    filterState: {
+      selectedValues: [],
+    },
+    queriesData: [
+      {
+        data: [
+          { col1: 'value1', col2: 'value2', metric1: 100, metric2: 50 },
+        ],
+      },
+    ],
+    width: 800,
+    theme: {
+      gridUnit: 8,
+      colors: {
+        grayscale: {
+          dark2: '#000000',
+        },
+      },
+    },
+    inContextMenu: false,
+    emitCrossFilters: jest.fn(),
+    datasource: {
+      currencyFormats: {},
+      columnFormats: {},
+    },
+  };
 
-interface CallbackDataParams {
-  data: TreeNode;
-  treePathInfo?: {
-    name: string;
-    dataIndex: number;
-    value: number;
-  }[];
-}
+  it('should transform chart properties correctly', () => {
+    const transformedProps = transformProps(chartProps);
 
-type ValueFormatter = (value: number) => string;
-
-describe('formatTooltip', () => {
-  const primaryValueFormatter: ValueFormatter = (value) => `primary ${value}`;
-  const secondaryValueFormatter: ValueFormatter = (value) => `secondary ${value}`;
-
-  const tooltipHtml = jest.fn().mockImplementation((rows, title) => {
-    return `${title} - ${JSON.stringify(rows)}`;
-  });
-
-  const NULL_STRING = 'N/A';
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should format tooltip with parent node and colorByCategory', () => {
-    const params = {
-      data: { value: 100, secondaryValue: 50, name: 'Node 1' },
-      treePathInfo: [
-        { name: 'Root', dataIndex: 0, value: 1000 },
-        { name: 'Node 1', dataIndex: 1, value: 100 },
-      ],
-    };
-    const result = formatTooltip({
-      params,
-      primaryValueFormatter,
-      secondaryValueFormatter,
-      colorByCategory: true,
-      totalValue: 1000,
-      metricLabel: 'Metric',
-      secondaryMetricLabel: 'Secondary Metric',
+    expect(transformedProps).toMatchObject({
+      formData: chartProps.formData,
+      width: chartProps.width,
+      height: chartProps.height,
+      echartOptions: expect.any(Object),
+      setDataMask: chartProps.hooks.setDataMask,
+      emitCrossFilters: chartProps.emitCrossFilters,
+      labelMap: expect.any(Object),
+      groupby: chartProps.formData.groupby,
+      selectedValues: chartProps.filterState.selectedValues,
+      onContextMenu: chartProps.hooks.onContextMenu,
+      refs: expect.any(Object),
+      coltypeMapping: expect.any(Object),
     });
 
-    expect(result).toContain('Node 1');
-    expect(result).toContain('% of total');
-    expect(result).toContain('10%');
-    expect(result).toContain('Metric');
-    expect(result).toContain('primary 100');
-    expect(result).toContain('N/A');
-    expect(result).toContain('N/A');
-  });
-
-  it('should format tooltip without parent node and colorByCategory', () => {
-    const params = {
-      data: { value: 100, secondaryValue: 50, name: 'Node 1' },
-      treePathInfo: [
-        { name: 'Root', dataIndex: 0, value: 1000 },
-      ],
-    };
-    const result = formatTooltip({
-      params,
-      primaryValueFormatter,
-      secondaryValueFormatter,
-      colorByCategory: false,
-      totalValue: 1000,
-      metricLabel: 'Metric',
-      secondaryMetricLabel: 'Secondary Metric',
+    expect(transformedProps.echartOptions).toMatchObject({
+      grid: expect.any(Object),
+      tooltip: expect.any(Object),
+      series: expect.any(Array),
+      graphic: expect.any(Object),
     });
 
-    expect(result).toContain('Node 1');
-    expect(result).toContain('% of total');
-    expect(result).toContain('10%');
-    expect(result).toContain('Metric');
-    expect(result).toContain('primary 100');
-    expect(result).toContain('Secondary Metric');
-    expect(result).toContain('secondary 50');
-    expect(result).toContain('Metric/Secondary Metric');
-    expect(result).toContain('50%');
+    expect(transformedProps.echartOptions.series[0]).toMatchObject({
+      type: 'sunburst',
+      emphasis: expect.any(Object),
+      label: expect.any(Object),
+      radius: expect.any(Array),
+      data: expect.any(Array),
+    });
   });
 
-  it('should handle missing secondaryMetricLabel and secondaryValueFormatter', () => {
-    const params = {
-      data: { value: 100, secondaryValue: 50, name: 'Node 1' },
-      treePathInfo: [
-        { name: 'Root', dataIndex: 0, value: 1000 },
-        { name: 'Node 1', dataIndex: 1, value: 100 },
-      ],
+  it('should handle missing secondaryMetric', () => {
+    const chartPropsNoSecondaryMetric = {
+      ...chartProps,
+      formData: {
+        ...chartProps.formData,
+        secondaryMetric: '',
+      },
     };
-    const result = formatTooltip({
-      params,
-      primaryValueFormatter,
-      secondaryValueFormatter: undefined,
-      colorByCategory: false,
-      totalValue: 1000,
-      metricLabel: 'Metric',
-      secondaryMetricLabel: undefined,
-    });
+    const transformedProps = transformProps(chartPropsNoSecondaryMetric);
 
-    expect(result).toContain('Node 1');
-    expect(result).toContain('% of total');
-    expect(result).toContain('10%');
-    expect(result).toContain('Metric');
-    expect(result).toContain('primary 100');
-    expect(result).toContain('N/A');
-    expect(result).toContain('Metric/N/A');
-    expect(result).toContain('NaN%');
+    expect(transformedProps.echartOptions.tooltip).toMatchObject({
+      formatter: expect.any(Function),
+    });
+  });
+
+  it('should handle missing data', () => {
+    const chartPropsNoData = {
+      ...chartProps,
+      queriesData: [{ data: [] }],
+    };
+    const transformedProps = transformProps(chartPropsNoData);
+
+    expect(transformedProps.echartOptions.series[0].data).toEqual([]);
+  });
+
+  it('should handle showTotal', () => {
+    const transformedProps = transformProps(chartProps);
+    expect(transformedProps.echartOptions.graphic).toMatchObject({
+      type: 'text',
+      top: 'center',
+      left: 'center',
+      style: {
+        text: expect.stringContaining('Total: formatted 100'),
+        fontSize: 16,
+        fontWeight: 'bold',
+      },
+      z: 10,
+    });
+  });
+
+  it('should handle minShowLabelAngle', () => {
+    const transformedProps = transformProps(chartProps);
+    expect(transformedProps.echartOptions.series[0].label.minAngle).toBe(36);
   });
 });
