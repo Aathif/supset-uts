@@ -1,90 +1,97 @@
-import isEqualColumns from './isEqualColumns';
-import { isEqualArray } from '@superset-ui/core';
+import { GenericDataType, getNumberFormatter, sanitizeHtml } from '@superset-ui/core';
+import DateWithFormatter from './DateWithFormatter';
+import { formatColumnValue } from './formatColumnValue';
 
 jest.mock('@superset-ui/core', () => ({
-  isEqualArray: jest.fn(),
+  GenericDataType: {
+    Numeric: 'NUMERIC',
+  },
+  getNumberFormatter: jest.fn(),
+  sanitizeHtml: jest.fn(),
+  isProbablyHTML: jest.fn(),
 }));
 
-describe('isEqualColumns', () => {
-  const mockTableChartProps = (overrides = {}) => ({
-    datasource: {
-      columnFormats: {},
-      currencyFormats: {},
-      verboseMap: {},
-    },
-    formData: {
-      tableTimestampFormat: '',
-      timeGrainSqla: '',
-      columnConfig: {},
-      metrics: [],
-      extraFilters: [],
-      extraFormData: {},
-    },
-    queriesData: [
-      {
-        colnames: [],
-        coltypes: [],
-      },
-    ],
-    rawFormData: {
-      column_config: {},
-    },
+describe('formatColumnValue', () => {
+  const mockColumn = (overrides = {}) => ({
+    dataType: GenericDataType.Numeric,
+    formatter: jest.fn(),
+    config: {},
     ...overrides,
   });
 
-  it('should return true for identical props', () => {
-    const propsA = [mockTableChartProps()];
-    const propsB = [mockTableChartProps()];
+  const testValue = 0.5;
 
-    isEqualArray.mockReturnValue(true);
-
-    expect(isEqualColumns(propsA, propsB)).toBe(true);
+  it('should format undefined as an empty string', () => {
+    const column = mockColumn();
+    const result = formatColumnValue(column, undefined);
+    expect(result).toEqual([false, '']);
   });
 
-  it('should return false for different columnFormats', () => {
-    const propsA = [mockTableChartProps({ datasource: { columnFormats: { a: 1 } } })];
-    const propsB = [mockTableChartProps({ datasource: { columnFormats: { b: 2 } } })];
-
-    isEqualArray.mockReturnValue(true);
-
-    expect(isEqualColumns(propsA, propsB)).toBe(false);
+  it('should format null as "N/A"', () => {
+    const column = mockColumn();
+    const result = formatColumnValue(column, null);
+    expect(result).toEqual([false, 'N/A']);
   });
 
-  it('should return false for different metrics', () => {
-    const propsA = [mockTableChartProps({ formData: { metrics: [1] } })];
-    const propsB = [mockTableChartProps({ formData: { metrics: [2] } })];
-
-    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
-
-    expect(isEqualColumns(propsA, propsB)).toBe(false);
+  it('should format a DateWithFormatter with null input as "N/A"', () => {
+    const column = mockColumn();
+    const result = formatColumnValue(column, new DateWithFormatter(null, jest.fn()));
+    expect(result).toEqual([false, 'N/A']);
   });
 
-  it('should return true for same metrics', () => {
-    const propsA = [mockTableChartProps({ formData: { metrics: [1] } })];
-    const propsB = [mockTableChartProps({ formData: { metrics: [1] } })];
-
-    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
-
-    expect(isEqualColumns(propsA, propsB)).toBe(true);
+  it('should format using the provided formatter', () => {
+    const formatter = jest.fn().mockReturnValue('formatted value');
+    const column = mockColumn({ formatter });
+    const result = formatColumnValue(column, testValue);
+    expect(result).toEqual([false, 'formatted value']);
+    expect(formatter).toHaveBeenCalledWith(testValue);
   });
 
-  it('should return false for different colnames', () => {
-    const propsA = [mockTableChartProps({ queriesData: [{ colnames: ['a'] }] })];
-    const propsB = [mockTableChartProps({ queriesData: [{ colnames: ['b'] }] })];
+  it('should sanitize HTML strings', () => {
+    const column = mockColumn();
+    const value = '<div>test</div>';
+    sanitizeHtml.mockReturnValue('sanitized html');
+    isProbablyHTML.mockReturnValue(true);
 
-    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
-
-    expect(isEqualColumns(propsA, propsB)).toBe(false);
+    const result = formatColumnValue(column, value);
+    expect(result).toEqual([true, 'sanitized html']);
+    expect(sanitizeHtml).toHaveBeenCalledWith(value);
   });
 
-  it('should return true for same colnames', () => {
-    const propsA = [mockTableChartProps({ queriesData: [{ colnames: ['a'] }] })];
-    const propsB = [mockTableChartProps({ queriesData: [{ colnames: ['a'] }] })];
+  it('should return plain strings as is', () => {
+    const column = mockColumn();
+    const value = 'plain text';
+    isProbablyHTML.mockReturnValue(false);
 
-    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
-
-    expect(isEqualColumns(propsA, propsB)).toBe(true);
+    const result = formatColumnValue(column, value);
+    expect(result).toEqual([false, value]);
   });
 
-  // Add more test cases as needed
+  it('should format small numbers with a specific formatter', () => {
+    const smallNumberFormatter = jest.fn().mockReturnValue('small formatted value');
+    getNumberFormatter.mockReturnValue(smallNumberFormatter);
+
+    const column = mockColumn({
+      config: { d3SmallNumberFormat: '.2f' },
+    });
+    const result = formatColumnValue(column, 0.01);
+    expect(result).toEqual([false, 'small formatted value']);
+    expect(smallNumberFormatter).toHaveBeenCalledWith(0.01);
+  });
+
+  it('should format small numbers with a currency formatter', () => {
+    const currencyFormatter = jest.fn().mockReturnValue('currency formatted value');
+    const mockCurrencyFormatter = jest.fn().mockReturnValue(currencyFormatter);
+    jest.mock('@superset-ui/core', () => ({
+      ...jest.requireActual('@superset-ui/core'),
+      CurrencyFormatter: mockCurrencyFormatter,
+    }));
+
+    const column = mockColumn({
+      config: { d3SmallNumberFormat: '.2f', currencyFormat: 'USD' },
+    });
+    const result = formatColumnValue(column, 0.01);
+    expect(result).toEqual([false, 'currency formatted value']);
+    expect(currencyFormatter).toHaveBeenCalledWith(0.01);
+  });
 });
