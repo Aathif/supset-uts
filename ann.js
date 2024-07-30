@@ -1,129 +1,90 @@
-import transformProps from './transformProps';
+import isEqualColumns from './isEqualColumns';
+import { isEqualArray } from '@superset-ui/core';
 
-describe('transformProps', () => {
-  it('should transform chartProps correctly', () => {
-    const chartProps = {
-      width: 800,
-      height: 600,
-      formData: {
-        includeSeries: true,
-        linearColorScheme: 'schemeBlues',
-        metrics: [{ label: 'metric1' }, { label: 'metric2' }],
-        secondaryMetric: { label: 'secondaryMetric' },
-        series: 'seriesName',
-        showDatatable: true,
+jest.mock('@superset-ui/core', () => ({
+  isEqualArray: jest.fn(),
+}));
+
+describe('isEqualColumns', () => {
+  const mockTableChartProps = (overrides = {}) => ({
+    datasource: {
+      columnFormats: {},
+      currencyFormats: {},
+      verboseMap: {},
+    },
+    formData: {
+      tableTimestampFormat: '',
+      timeGrainSqla: '',
+      columnConfig: {},
+      metrics: [],
+      extraFilters: [],
+      extraFormData: {},
+    },
+    queriesData: [
+      {
+        colnames: [],
+        coltypes: [],
       },
-      queriesData: [
-        {
-          data: [
-            { x: 1, y: 2 },
-            { x: 2, y: 3 },
-          ],
-        },
-      ],
-    };
-
-    const expectedTransformedProps = {
-      width: 800,
-      height: 600,
-      data: [
-        { x: 1, y: 2 },
-        { x: 2, y: 3 },
-      ],
-      includeSeries: true,
-      linearColorScheme: 'schemeBlues',
-      metrics: ['metric1', 'metric2'],
-      colorMetric: 'secondaryMetric',
-      series: 'seriesName',
-      showDatatable: true,
-    };
-
-    const result = transformProps(chartProps);
-
-    expect(result).toEqual(expectedTransformedProps);
+    ],
+    rawFormData: {
+      column_config: {},
+    },
+    ...overrides,
   });
 
-  it('should handle secondaryMetric without a label correctly', () => {
-    const chartProps = {
-      width: 800,
-      height: 600,
-      formData: {
-        includeSeries: true,
-        linearColorScheme: 'schemeBlues',
-        metrics: [{ label: 'metric1' }, { label: 'metric2' }],
-        secondaryMetric: 'secondaryMetric',
-        series: 'seriesName',
-        showDatatable: true,
-      },
-      queriesData: [
-        {
-          data: [
-            { x: 1, y: 2 },
-            { x: 2, y: 3 },
-          ],
-        },
-      ],
-    };
+  it('should return true for identical props', () => {
+    const propsA = [mockTableChartProps()];
+    const propsB = [mockTableChartProps()];
 
-    const expectedTransformedProps = {
-      width: 800,
-      height: 600,
-      data: [
-        { x: 1, y: 2 },
-        { x: 2, y: 3 },
-      ],
-      includeSeries: true,
-      linearColorScheme: 'schemeBlues',
-      metrics: ['metric1', 'metric2'],
-      colorMetric: 'secondaryMetric',
-      series: 'seriesName',
-      showDatatable: true,
-    };
+    isEqualArray.mockReturnValue(true);
 
-    const result = transformProps(chartProps);
-
-    expect(result).toEqual(expectedTransformedProps);
+    expect(isEqualColumns(propsA, propsB)).toBe(true);
   });
 
-  it('should handle metrics without labels correctly', () => {
-    const chartProps = {
-      width: 800,
-      height: 600,
-      formData: {
-        includeSeries: true,
-        linearColorScheme: 'schemeBlues',
-        metrics: ['metric1', 'metric2'],
-        secondaryMetric: { label: 'secondaryMetric' },
-        series: 'seriesName',
-        showDatatable: true,
-      },
-      queriesData: [
-        {
-          data: [
-            { x: 1, y: 2 },
-            { x: 2, y: 3 },
-          ],
-        },
-      ],
-    };
+  it('should return false for different columnFormats', () => {
+    const propsA = [mockTableChartProps({ datasource: { columnFormats: { a: 1 } } })];
+    const propsB = [mockTableChartProps({ datasource: { columnFormats: { b: 2 } } })];
 
-    const expectedTransformedProps = {
-      width: 800,
-      height: 600,
-      data: [
-        { x: 1, y: 2 },
-        { x: 2, y: 3 },
-      ],
-      includeSeries: true,
-      linearColorScheme: 'schemeBlues',
-      metrics: ['metric1', 'metric2'],
-      colorMetric: 'secondaryMetric',
-      series: 'seriesName',
-      showDatatable: true,
-    };
+    isEqualArray.mockReturnValue(true);
 
-    const result = transformProps(chartProps);
-
-    expect(result).toEqual(expectedTransformedProps);
+    expect(isEqualColumns(propsA, propsB)).toBe(false);
   });
+
+  it('should return false for different metrics', () => {
+    const propsA = [mockTableChartProps({ formData: { metrics: [1] } })];
+    const propsB = [mockTableChartProps({ formData: { metrics: [2] } })];
+
+    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(isEqualColumns(propsA, propsB)).toBe(false);
+  });
+
+  it('should return true for same metrics', () => {
+    const propsA = [mockTableChartProps({ formData: { metrics: [1] } })];
+    const propsB = [mockTableChartProps({ formData: { metrics: [1] } })];
+
+    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(isEqualColumns(propsA, propsB)).toBe(true);
+  });
+
+  it('should return false for different colnames', () => {
+    const propsA = [mockTableChartProps({ queriesData: [{ colnames: ['a'] }] })];
+    const propsB = [mockTableChartProps({ queriesData: [{ colnames: ['b'] }] })];
+
+    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(isEqualColumns(propsA, propsB)).toBe(false);
+  });
+
+  it('should return true for same colnames', () => {
+    const propsA = [mockTableChartProps({ queriesData: [{ colnames: ['a'] }] })];
+    const propsB = [mockTableChartProps({ queriesData: [{ colnames: ['a'] }] })];
+
+    isEqualArray.mockImplementation((a, b) => JSON.stringify(a) === JSON.stringify(b));
+
+    expect(isEqualColumns(propsA, propsB)).toBe(true);
+  });
+
+  // Add more test cases as needed
 });
