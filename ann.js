@@ -1,74 +1,57 @@
-import { normalizeTimestamp } from '@superset-ui/core';
-import DateWithFormatter from './DateWithFormatter';
+import extent from './extent';
 
-jest.mock('@superset-ui/core', () => ({
-  normalizeTimestamp: jest.fn(),
-}));
-
-describe('DateWithFormatter', () => {
-  const mockTimestamp = '2024-07-28T14:20:00Z';
-  const mockNormalizedTimestamp = new Date(mockTimestamp).toISOString();
-
-  beforeEach(() => {
-    normalizeTimestamp.mockImplementation((value) => {
-      if (typeof value === 'string') {
-        return mockNormalizedTimestamp;
-      }
-      return value;
-    });
+describe('extent', () => {
+  it('should return [undefined, undefined] for an empty array', () => {
+    expect(extent([])).toEqual([undefined, undefined]);
   });
 
-  it('should retain the original input', () => {
-    const input = mockTimestamp;
-    const date = new DateWithFormatter(input);
-    expect(date.input).toBe(input);
+  it('should return the correct min and max for an array of numbers', () => {
+    const values = [3, 1, 4, 1, 5, 9];
+    expect(extent(values)).toEqual([1, 9]);
   });
 
-  it('should normalize timestamp strings', () => {
-    const input = mockTimestamp;
-    const date = new DateWithFormatter(input);
-    expect(normalizeTimestamp).toHaveBeenCalledWith(input);
-    expect(date.toISOString()).toBe(mockNormalizedTimestamp);
+  it('should return the correct min and max for an array of strings', () => {
+    const values = ['c', 'a', 'd', 'b'];
+    expect(extent(values)).toEqual(['a', 'd']);
   });
 
-  it('should default to the String formatter', () => {
-    const input = mockTimestamp;
-    const date = new DateWithFormatter(input);
-    expect(date.toString()).toBe(input);
+  it('should return the correct min and max for an array of dates', () => {
+    const values = [
+      new Date('2020-01-01'),
+      new Date('2019-01-01'),
+      new Date('2021-01-01'),
+    ];
+    expect(extent(values)).toEqual([
+      new Date('2019-01-01'),
+      new Date('2021-01-01'),
+    ]);
   });
 
-  it('should use the provided formatter', () => {
-    const input = mockTimestamp;
-    const formatter = jest.fn().mockReturnValue('formatted date');
-    const date = new DateWithFormatter(input, { formatter });
-    expect(date.toString()).toBe('formatted date');
-    expect(formatter).toHaveBeenCalledWith(date);
+  it('should ignore null values', () => {
+    const values = [3, null, 1, 4, null, 1, 5, 9];
+    expect(extent(values)).toEqual([1, 9]);
   });
 
-  it('should handle non-string input correctly', () => {
-    const input = 1659031200000; // numeric timestamp
-    const date = new DateWithFormatter(input);
-    expect(date.input).toBe(input);
-    expect(date.toISOString()).toBe(new Date(input).toISOString());
+  it('should ignore undefined values', () => {
+    const values = [3, undefined, 1, 4, undefined, 1, 5, 9];
+    expect(extent(values)).toEqual([1, 9]);
   });
 
-  it('should return original input for non-string input with default formatter', () => {
-    const input = 1659031200000; // numeric timestamp
-    const date = new DateWithFormatter(input);
-    expect(date.toString()).toBe(String(input));
+  it('should handle an array with only null or undefined values', () => {
+    expect(extent([null, null, undefined])).toEqual([undefined, undefined]);
   });
 
-  it('should handle null input correctly', () => {
-    const input = null;
-    const date = new DateWithFormatter(input);
-    expect(date.input).toBe(input);
-    expect(date.toString()).toBe('null');
+  it('should handle an array with a single value', () => {
+    expect(extent([5])).toEqual([5, 5]);
   });
 
-  it('should handle undefined input correctly', () => {
-    const input = undefined;
-    const date = new DateWithFormatter(input);
-    expect(date.input).toBe(input);
-    expect(date.toString()).toBe('undefined');
+  it('should handle an array with multiple identical values', () => {
+    expect(extent([7, 7, 7, 7])).toEqual([7, 7]);
+  });
+
+  it('should handle mixed types in the array', () => {
+    const values = [3, 'a', new Date('2020-01-01')];
+    // This is not a typical use case, but it tests the robustness of the function
+    expect(extent(values)).toEqual([3, new Date('2020-01-01')]);
   });
 });
