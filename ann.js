@@ -1,57 +1,78 @@
-import extent from './extent';
+import getScrollBarSize from './getScrollBarSize';
 
-describe('extent', () => {
-  it('should return [undefined, undefined] for an empty array', () => {
-    expect(extent([])).toEqual([undefined, undefined]);
+describe('getScrollBarSize', () => {
+  beforeEach(() => {
+    jest.resetModules(); // Clear cached module to reset the cache
   });
 
-  it('should return the correct min and max for an array of numbers', () => {
-    const values = [3, 1, 4, 1, 5, 9];
-    expect(extent(values)).toEqual([1, 9]);
+  it('should return 0 when document is undefined', () => {
+    const originalDocument = global.document;
+    delete global.document;
+    expect(getScrollBarSize()).toBe(0);
+    global.document = originalDocument;
   });
 
-  it('should return the correct min and max for an array of strings', () => {
-    const values = ['c', 'a', 'd', 'b'];
-    expect(extent(values)).toEqual(['a', 'd']);
+  it('should calculate and cache the scrollbar size', () => {
+    // Mock the document to simulate browser environment
+    document.body.innerHTML = ''; // Reset body
+
+    const div = document.createElement('div');
+    div.style.width = '100px';
+    div.style.height = '50px';
+    div.style.overflow = 'hidden';
+    document.body.append(div);
+
+    const scrollbarSize = getScrollBarSize(true);
+    expect(scrollbarSize).toBeGreaterThan(0);
+
+    const cachedScrollbarSize = getScrollBarSize();
+    expect(cachedScrollbarSize).toBe(scrollbarSize);
+
+    div.remove();
   });
 
-  it('should return the correct min and max for an array of dates', () => {
-    const values = [
-      new Date('2020-01-01'),
-      new Date('2019-01-01'),
-      new Date('2021-01-01'),
-    ];
-    expect(extent(values)).toEqual([
-      new Date('2019-01-01'),
-      new Date('2021-01-01'),
-    ]);
+  it('should refresh the scrollbar size when forceRefresh is true', () => {
+    // Mock the document to simulate browser environment
+    document.body.innerHTML = ''; // Reset body
+
+    const div = document.createElement('div');
+    div.style.width = '100px';
+    div.style.height = '50px';
+    div.style.overflow = 'hidden';
+    document.body.append(div);
+
+    const initialScrollbarSize = getScrollBarSize(true);
+    expect(initialScrollbarSize).toBeGreaterThan(0);
+
+    // Simulate a change in the scrollbar size
+    const newDiv = document.createElement('div');
+    newDiv.style.width = '200px';
+    newDiv.style.height = '100px';
+    newDiv.style.overflow = 'hidden';
+    document.body.append(newDiv);
+
+    const refreshedScrollbarSize = getScrollBarSize(true);
+    expect(refreshedScrollbarSize).not.toBe(initialScrollbarSize);
+
+    newDiv.remove();
   });
 
-  it('should ignore null values', () => {
-    const values = [3, null, 1, 4, null, 1, 5, 9];
-    expect(extent(values)).toEqual([1, 9]);
-  });
+  it('should not recalculate the scrollbar size when it is cached', () => {
+    // Mock the document to simulate browser environment
+    document.body.innerHTML = ''; // Reset body
 
-  it('should ignore undefined values', () => {
-    const values = [3, undefined, 1, 4, undefined, 1, 5, 9];
-    expect(extent(values)).toEqual([1, 9]);
-  });
+    const div = document.createElement('div');
+    div.style.width = '100px';
+    div.style.height = '50px';
+    div.style.overflow = 'hidden';
+    document.body.append(div);
 
-  it('should handle an array with only null or undefined values', () => {
-    expect(extent([null, null, undefined])).toEqual([undefined, undefined]);
-  });
+    const scrollbarSize = getScrollBarSize(true);
+    expect(scrollbarSize).toBeGreaterThan(0);
 
-  it('should handle an array with a single value', () => {
-    expect(extent([5])).toEqual([5, 5]);
-  });
+    const cachedScrollbarSize = getScrollBarSize();
+    expect(cachedScrollbarSize).toBe(scrollbarSize);
 
-  it('should handle an array with multiple identical values', () => {
-    expect(extent([7, 7, 7, 7])).toEqual([7, 7]);
-  });
-
-  it('should handle mixed types in the array', () => {
-    const values = [3, 'a', new Date('2020-01-01')];
-    // This is not a typical use case, but it tests the robustness of the function
-    expect(extent(values)).toEqual([3, new Date('2020-01-01')]);
+    div.remove();
   });
 });
