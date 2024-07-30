@@ -1,167 +1,123 @@
-import {
-  getColtypesMapping,
-  getValueFormatter,
-  getNumberFormatter,
-  getMetricLabel,
-  getTimeFormatter,
-  getSequentialSchemeRegistry,
-  formatSeriesName,
-  treeBuilder,
-  CategoricalColorNamespace,
-  OpacityEnum,
-  EChartsCoreOption,
-  t,
-} from '@superset-ui/core';
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react';
+import EchartsSunburst, { extractTreePathInfo } from './EchartsSunburst';
+import { SunburstTransformedProps } from './types';
+import { BinaryQueryObjectFilterClause } from '@superset-ui/core';
 
-// Mocking dependencies
 jest.mock('@superset-ui/core', () => ({
-  getColtypesMapping: jest.fn(),
-  getValueFormatter: jest.fn().mockImplementation(() => (value: number) => `formatted ${value}`),
+  getColumnLabel: jest.fn().mockImplementation(col => col),
   getNumberFormatter: jest.fn().mockImplementation(() => (value: number) => `${value}`),
-  getMetricLabel: jest.fn().mockImplementation(metric => metric),
   getTimeFormatter: jest.fn().mockImplementation(() => (value: number) => `${value}`),
-  getSequentialSchemeRegistry: jest.fn().mockImplementation(() => ({
-    get: jest.fn().mockImplementation(() => ({
-      createLinearScale: jest.fn().mockImplementation(() => (value: number) => `linear ${value}`),
-    })),
-  })),
   formatSeriesName: jest.fn().mockImplementation((name, opts) => name),
-  treeBuilder: jest.fn().mockImplementation((data, columnLabels, metricLabel, secondaryMetricLabel) => data),
-  CategoricalColorNamespace: {
-    getScale: jest.fn().mockImplementation(() => (name: string) => name),
-  },
-  OpacityEnum: {
-    SemiTransparent: 0.5,
-  },
-  t: jest.fn().mockImplementation(key => key),
 }));
 
-describe('transformProps', () => {
-  const chartProps = {
-    formData: {
-      groupby: ['col1'],
-      columns: ['col2'],
-      metric: 'metric1',
-      secondaryMetric: 'metric2',
-      colorScheme: 'scheme1',
-      linearColorScheme: 'linearScheme1',
-      labelType: 'KeyValue',
-      numberFormat: '.2f',
-      currencyFormat: '$',
-      dateFormat: 'YYYY-MM-DD',
-      showLabels: true,
-      showLabelsThreshold: 0.1,
-      showTotal: true,
-      sliceId: 1,
-    },
+jest.mock('../components/Echart', () => jest.fn().mockImplementation(({ eventHandlers }) => {
+  const { click, contextmenu } = eventHandlers;
+  return (
+    <div>
+      <button onClick={() => click({ treePathInfo: [{ name: 'path1' }] })}>Click Event</button>
+      <button onContextMenu={(e) => {
+        e.preventDefault();
+        contextmenu({
+          event: { event: e, stop: jest.fn() },
+          treePathInfo: [{ name: 'path1' }],
+          data: { records: ['record1'] },
+        });
+      }}>Context Menu Event</button>
+    </div>
+  );
+}));
+
+describe('EchartsSunburst', () => {
+  const defaultProps: SunburstTransformedProps = {
     height: 600,
-    hooks: {
-      setDataMask: jest.fn(),
-      onContextMenu: jest.fn(),
-    },
-    filterState: {
-      selectedValues: [],
-    },
-    queriesData: [
-      {
-        data: [
-          { col1: 'value1', col2: 'value2', metric1: 100, metric2: 50 },
-        ],
-      },
-    ],
     width: 800,
-    theme: {
-      gridUnit: 8,
-      colors: {
-        grayscale: {
-          dark2: '#000000',
-        },
-      },
+    echartOptions: {},
+    setDataMask: jest.fn(),
+    labelMap: { path1: ['path1'] },
+    selectedValues: ['path1'],
+    formData: {
+      columns: ['col1'],
+      dateFormat: 'YYYY-MM-DD',
+      numberFormat: '.2f',
     },
-    inContextMenu: false,
-    emitCrossFilters: jest.fn(),
-    datasource: {
-      currencyFormats: {},
-      columnFormats: {},
-    },
+    onContextMenu: jest.fn(),
+    refs: {},
+    emitCrossFilters: true,
+    coltypeMapping: { col1: 'string' },
   };
 
-  it('should transform chart properties correctly', () => {
-    const transformedProps = transformProps(chartProps);
-
-    expect(transformedProps).toMatchObject({
-      formData: chartProps.formData,
-      width: chartProps.width,
-      height: chartProps.height,
-      echartOptions: expect.any(Object),
-      setDataMask: chartProps.hooks.setDataMask,
-      emitCrossFilters: chartProps.emitCrossFilters,
-      labelMap: expect.any(Object),
-      groupby: chartProps.formData.groupby,
-      selectedValues: chartProps.filterState.selectedValues,
-      onContextMenu: chartProps.hooks.onContextMenu,
-      refs: expect.any(Object),
-      coltypeMapping: expect.any(Object),
-    });
-
-    expect(transformedProps.echartOptions).toMatchObject({
-      grid: expect.any(Object),
-      tooltip: expect.any(Object),
-      series: expect.any(Array),
-      graphic: expect.any(Object),
-    });
-
-    expect(transformedProps.echartOptions.series[0]).toMatchObject({
-      type: 'sunburst',
-      emphasis: expect.any(Object),
-      label: expect.any(Object),
-      radius: expect.any(Array),
-      data: expect.any(Array),
-    });
+  it('should render correctly', () => {
+    const { getByText } = render(<EchartsSunburst {...defaultProps} />);
+    expect(getByText('Click Event')).toBeInTheDocument();
+    expect(getByText('Context Menu Event')).toBeInTheDocument();
   });
 
-  it('should handle missing secondaryMetric', () => {
-    const chartPropsNoSecondaryMetric = {
-      ...chartProps,
-      formData: {
-        ...chartProps.formData,
-        secondaryMetric: '',
+  it('should handle click event', () => {
+    const { getByText } = render(<EchartsSunburst {...defaultProps} />);
+    fireEvent.click(getByText('Click Event'));
+
+    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
+      extraFormData: {
+        filters: [{
+          col: 'col1',
+          op: 'IN',
+          val: ['path1'],
+        }],
       },
-    };
-    const transformedProps = transformProps(chartPropsNoSecondaryMetric);
-
-    expect(transformedProps.echartOptions.tooltip).toMatchObject({
-      formatter: expect.any(Function),
-    });
-  });
-
-  it('should handle missing data', () => {
-    const chartPropsNoData = {
-      ...chartProps,
-      queriesData: [{ data: [] }],
-    };
-    const transformedProps = transformProps(chartPropsNoData);
-
-    expect(transformedProps.echartOptions.series[0].data).toEqual([]);
-  });
-
-  it('should handle showTotal', () => {
-    const transformedProps = transformProps(chartProps);
-    expect(transformedProps.echartOptions.graphic).toMatchObject({
-      type: 'text',
-      top: 'center',
-      left: 'center',
-      style: {
-        text: expect.stringContaining('Total: formatted 100'),
-        fontSize: 16,
-        fontWeight: 'bold',
+      filterState: {
+        value: [['path1']],
+        selectedValues: ['path1'],
       },
-      z: 10,
     });
   });
 
-  it('should handle minShowLabelAngle', () => {
-    const transformedProps = transformProps(chartProps);
-    expect(transformedProps.echartOptions.series[0].label.minAngle).toBe(36);
+  it('should handle context menu event', () => {
+    const { getByText } = render(<EchartsSunburst {...defaultProps} />);
+    fireEvent.contextMenu(getByText('Context Menu Event'));
+
+    expect(defaultProps.onContextMenu).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.any(Number),
+      {
+        drillToDetail: [{
+          col: 'col1',
+          op: '==',
+          val: 'record1',
+          formattedVal: 'path1',
+        }],
+        crossFilter: {
+          dataMask: {
+            extraFormData: {
+              filters: [{
+                col: 'col1',
+                op: 'IN',
+                val: ['path1'],
+              }],
+            },
+            filterState: {
+              value: [['path1']],
+              selectedValues: ['path1'],
+            },
+          },
+          isCurrentValueSelected: true,
+        },
+        drillBy: {
+          filters: [{
+            col: 'col1',
+            op: '==',
+            val: 'path1',
+            formattedVal: 'path1',
+          }],
+          groupbyFieldName: 'columns',
+        },
+      },
+    );
+  });
+
+  it('extractTreePathInfo should handle undefined and empty array', () => {
+    expect(extractTreePathInfo(undefined)).toEqual([]);
+    expect(extractTreePathInfo([])).toEqual([]);
+    expect(extractTreePathInfo([{ name: 'path1' }, { name: 'path2' }])).toEqual(['path1', 'path2']);
   });
 });
