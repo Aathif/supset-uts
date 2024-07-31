@@ -1,127 +1,187 @@
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
-import EchartsTimeseries from './EchartsTimeseries';
-import '@testing-library/jest-dom/extend-expect';
+import { CategoricalColorNamespace, getMetricLabel, getNumberFormatter, getTimeFormatter } from '@superset-ui/core';
+import { extractGroupbyLabel, getColtypesMapping } from '../utils/series';
+import { defaultGrid, defaultTooltip, defaultYAxis } from '../defaults';
+export default function transformProps(chartProps) {
+  const {
+    width,
+    height,
+    formData,
+    hooks,
+    ownState,
+    queriesData
+  } = chartProps;
+  const {
+    data = []
+  } = queriesData[0];
+  const {
+    setDataMask = () => {}
+  } = hooks;
+  const coltypeMapping = getColtypesMapping(queriesData[0]);
+  const {
+    colorScheme,
+    groupby = [],
+    metrics: formdataMetrics = [],
+    numberFormat,
+    dateFormat,
+    xTicksLayout,
+    emitFilter
+  } = formData;
+  const colorFn = CategoricalColorNamespace.getScale(colorScheme);
+  const numberFormatter = getNumberFormatter(numberFormat);
+  const metricLabels = formdataMetrics.map(getMetricLabel);
+  const transformedData = data.map(datum => {
+    const groupbyLabel = extractGroupbyLabel({
+      datum,
+      groupby,
+      coltypeMapping,
+      timeFormatter: getTimeFormatter(dateFormat)
+    });
+    return metricLabels.map(metric => {
+      const name = metricLabels.length === 1 ? groupbyLabel : `${groupbyLabel}, ${metric}`;
+      return {
+        name,
+        value: [datum[`${metric}__min`], datum[`${metric}__q1`], datum[`${metric}__median`], datum[`${metric}__q3`], datum[`${metric}__max`], datum[`${metric}__mean`], datum[`${metric}__count`], datum[`${metric}__outliers`]],
+        itemStyle: {
+          color: colorFn(groupbyLabel),
+          opacity: 0.6,
+          borderColor: colorFn(groupbyLabel)
+        }
+      };
+    });
+  }).flatMap(row => row);
+  const outlierData = data.map(datum => metricLabels.map(metric => {
+    const groupbyLabel = extractGroupbyLabel({
+      datum,
+      groupby,
+      coltypeMapping,
+      timeFormatter: getTimeFormatter(dateFormat)
+    });
+    const name = metricLabels.length === 1 ? groupbyLabel : `${groupbyLabel}, ${metric}`; // Outlier data is a nested array of numbers (uncommon, therefore no need to add to DataRecordValue)
 
-jest.mock('../components/Echart', () => ({ height, width, echartOptions, eventHandlers, selectedValues }) => (
-  <div>
-    <div data-testid="echart" style={{ height, width }}>
-      {JSON.stringify(echartOptions)}
-    </div>
-    <button data-testid="click-handler" onClick={() => eventHandlers.click({ seriesName: 'series1' })}>Click</button>
-  </div>
-));
-
-describe('EchartsTimeseries', () => {
-  const mockSetDataMask = jest.fn();
-  const formData = {
-    orderByColumn: 'value',
-    orderDesc: true,
-    emitFilter: true,
+    const outlierDatum = datum[`${metric}__outliers`] || [];
+    return {
+      name: 'outlier',
+      type: 'scatter',
+      data: outlierDatum.map(val => [name, val]),
+      tooltip: {
+        fontSize: 11,
+        color: '#626D8A',
+        formatter: param => {
+          const [outlierName, stats] = param.data;
+          const headline = groupby ? `<p><strong>${outlierName}</strong></p>` : '';
+          return `${headline}${numberFormatter(stats)}`;
+        }
+      },
+      itemStyle: {
+        color: colorFn(groupbyLabel)
+      }
+    };
+  })).flat(2);
+  const labelMap = data.reduce((acc, datum) => {
+    const label = extractGroupbyLabel({
+      datum,
+      groupby,
+      coltypeMapping,
+      timeFormatter: getTimeFormatter(dateFormat)
+    });
+    return { ...acc,
+      [label]: groupby.map(col => datum[col])
+    };
+  }, {});
+  const selectedValues = (ownState.selectedValues || []).reduce((acc, selectedValue) => {
+    const index = transformedData.findIndex(({
+      name
+    }) => name === selectedValue);
+    return { ...acc,
+      [index]: selectedValue
+    };
+  }, {});
+  let axisLabel;
+  if (xTicksLayout === '45°') axisLabel = {
+    rotate: -45
+  };else if (xTicksLayout === '90°') axisLabel = {
+    rotate: -90
+  };else if (xTicksLayout === 'flat') axisLabel = {
+    rotate: 0
+  };else if (xTicksLayout === 'staggered') axisLabel = {
+    rotate: -45
+  };else axisLabel = {
+    show: true
   };
+  const series = [{
+    name: 'boxplot',
+    type: 'boxplot',
+    data: transformedData,
+    tooltip: {
+      formatter: param => {
+        // @ts-ignore
+        const {
+          value,
+          name
+        } = param;
+        const headline = name ? `<p><strong>${name}</strong></p>` : '';
+        const stats = [`Max: ${numberFormatter(value[5])}`, `3rd Quartile: ${numberFormatter(value[4])}`, `Mean: ${numberFormatter(value[6])}`, `Median: ${numberFormatter(value[3])}`, `1st Quartile: ${numberFormatter(value[2])}`, `Min: ${numberFormatter(value[1])}`, `# Observations: ${numberFormatter(value[7])}`];
+
+        if (value[8].length > 0) {
+          stats.push(`# Outliers: ${numberFormatter(value[8].length)}`);
+        }
+
+        return headline + stats.join('<br/>');
+      }
+    }
+  }, // @ts-ignore
+  ...outlierData];
   const echartOptions = {
-    series: [
-      {
-        data: [[1, 10], [2, 20], [3, 15]],
+    grid: { ...defaultGrid,
+      top: 30,
+      bottom: 30,
+      left: 20,
+      right: 20
+    },
+    xAxis: {
+      type: 'category',
+      data: transformedData.map(row => row.name),
+      axisLabel: {...axisLabel,color: '#626D8A',fontSize: 11},
+      axisLine: {
+        lineStyle: {
+          color: '#EAEEF4'
+        }
+      }
+    },
+    yAxis: { ...defaultYAxis,
+      type: 'value',
+      axisLabel: {
+        formatter: numberFormatter,
+        color: '#626D8A',
+        fontSize: 11
       },
-    ],
+      axisLine: {
+        lineStyle: {
+          color: '#EAEEF4'
+        }
+      }
+    },
+    tooltip: { ...defaultTooltip,
+      trigger: 'item',
+      textStyle: {
+        fontSize: 11,
+        color: '#626D8A'
+      },
+      axisPointer: {
+        type: 'shadow'
+      }
+    },
+    series
   };
-  const groupby = ['col1'];
-  const labelMap = { series1: ['label1'] };
-  const selectedValues = ['series1'];
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should render without crashing', () => {
-    const { getByTestId } = render(
-      <EchartsTimeseries
-        formData={formData}
-        height={400}
-        width={800}
-        echartOptions={echartOptions}
-        groupby={groupby}
-        labelMap={labelMap}
-        selectedValues={selectedValues}
-        setDataMask={mockSetDataMask}
-      />
-    );
-    expect(getByTestId('echart')).toBeInTheDocument();
-  });
-
-  it('should sort the series data based on formData.orderByColumn and formData.orderDesc', () => {
-    render(
-      <EchartsTimeseries
-        formData={formData}
-        height={400}
-        width={800}
-        echartOptions={echartOptions}
-        groupby={groupby}
-        labelMap={labelMap}
-        selectedValues={selectedValues}
-        setDataMask={mockSetDataMask}
-      />
-    );
-
-    // The data should be sorted by the second column (value) in descending order
-    expect(echartOptions.series[0].data).toEqual([[2, 20], [3, 15], [1, 10]]);
-  });
-
-  it('should handle click events and update selected values', () => {
-    const { getByTestId } = render(
-      <EchartsTimeseries
-        formData={formData}
-        height={400}
-        width={800}
-        echartOptions={echartOptions}
-        groupby={groupby}
-        labelMap={labelMap}
-        selectedValues={selectedValues}
-        setDataMask={mockSetDataMask}
-      />
-    );
-
-    fireEvent.click(getByTestId('click-handler'));
-
-    expect(mockSetDataMask).toHaveBeenCalledWith({
-      extraFormData: {
-        filters: [{ col: 'col1', op: 'IN', val: ['label1'] }],
-      },
-      filterState: {
-        label: [['label1']],
-        value: [['label1']],
-        selectedValues: ['series1'],
-      },
-    });
-  });
-
-  it('should handle click events and remove selected values if already selected', () => {
-    const newSelectedValues = ['series1', 'series2'];
-    const { getByTestId } = render(
-      <EchartsTimeseries
-        formData={formData}
-        height={400}
-        width={800}
-        echartOptions={echartOptions}
-        groupby={groupby}
-        labelMap={labelMap}
-        selectedValues={newSelectedValues}
-        setDataMask={mockSetDataMask}
-      />
-    );
-
-    fireEvent.click(getByTestId('click-handler'));
-
-    expect(mockSetDataMask).toHaveBeenCalledWith({
-      extraFormData: {
-        filters: [{ col: 'col1', op: 'IN', val: ['label1'] }],
-      },
-      filterState: {
-        label: [['label1']],
-        value: [['label1']],
-        selectedValues: ['series2'],
-      },
-    });
-  });
-});
+  return {
+    formData,
+    width,
+    height,
+    echartOptions,
+    setDataMask,
+    emitFilter,
+    labelMap,
+    groupby,
+    selectedValues
+  };
+}
