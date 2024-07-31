@@ -1,187 +1,98 @@
-import { CategoricalColorNamespace, getMetricLabel, getNumberFormatter, getTimeFormatter } from '@superset-ui/core';
+import transformProps from './transformProps';
+import { CategoricalColorNamespace, getNumberFormatter, getTimeFormatter } from '@superset-ui/core';
 import { extractGroupbyLabel, getColtypesMapping } from '../utils/series';
-import { defaultGrid, defaultTooltip, defaultYAxis } from '../defaults';
-export default function transformProps(chartProps) {
-  const {
-    width,
-    height,
-    formData,
-    hooks,
-    ownState,
-    queriesData
-  } = chartProps;
-  const {
-    data = []
-  } = queriesData[0];
-  const {
-    setDataMask = () => {}
-  } = hooks;
-  const coltypeMapping = getColtypesMapping(queriesData[0]);
-  const {
-    colorScheme,
-    groupby = [],
-    metrics: formdataMetrics = [],
-    numberFormat,
-    dateFormat,
-    xTicksLayout,
-    emitFilter
-  } = formData;
-  const colorFn = CategoricalColorNamespace.getScale(colorScheme);
-  const numberFormatter = getNumberFormatter(numberFormat);
-  const metricLabels = formdataMetrics.map(getMetricLabel);
-  const transformedData = data.map(datum => {
-    const groupbyLabel = extractGroupbyLabel({
-      datum,
-      groupby,
-      coltypeMapping,
-      timeFormatter: getTimeFormatter(dateFormat)
-    });
-    return metricLabels.map(metric => {
-      const name = metricLabels.length === 1 ? groupbyLabel : `${groupbyLabel}, ${metric}`;
-      return {
-        name,
-        value: [datum[`${metric}__min`], datum[`${metric}__q1`], datum[`${metric}__median`], datum[`${metric}__q3`], datum[`${metric}__max`], datum[`${metric}__mean`], datum[`${metric}__count`], datum[`${metric}__outliers`]],
-        itemStyle: {
-          color: colorFn(groupbyLabel),
-          opacity: 0.6,
-          borderColor: colorFn(groupbyLabel)
-        }
-      };
-    });
-  }).flatMap(row => row);
-  const outlierData = data.map(datum => metricLabels.map(metric => {
-    const groupbyLabel = extractGroupbyLabel({
-      datum,
-      groupby,
-      coltypeMapping,
-      timeFormatter: getTimeFormatter(dateFormat)
-    });
-    const name = metricLabels.length === 1 ? groupbyLabel : `${groupbyLabel}, ${metric}`; // Outlier data is a nested array of numbers (uncommon, therefore no need to add to DataRecordValue)
 
-    const outlierDatum = datum[`${metric}__outliers`] || [];
-    return {
+jest.mock('@superset-ui/core', () => ({
+  CategoricalColorNamespace: {
+    getScale: jest.fn(() => jest.fn(() => '#ff0000')),
+  },
+  getMetricLabel: jest.fn(metric => metric),
+  getNumberFormatter: jest.fn(() => jest.fn(number => number.toString())),
+  getTimeFormatter: jest.fn(() => jest.fn(date => date.toString())),
+}));
+
+jest.mock('../utils/series', () => ({
+  extractGroupbyLabel: jest.fn(({ datum, groupby }) => groupby.map(col => datum[col]).join(',')),
+  getColtypesMapping: jest.fn(() => ({})),
+}));
+
+const defaultGrid = {};
+const defaultTooltip = {};
+const defaultYAxis = {};
+
+describe('transformProps', () => {
+  it('should transform props correctly', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        colorScheme: 'd3Category10',
+        groupby: ['country'],
+        metrics: ['metric1'],
+        numberFormat: 'SMART_NUMBER',
+        dateFormat: 'smart_date',
+        xTicksLayout: '45°',
+        emitFilter: true,
+      },
+      hooks: {
+        setDataMask: jest.fn(),
+      },
+      ownState: {
+        selectedValues: [],
+      },
+      queriesData: [
+        {
+          data: [
+            { country: 'USA', metric1__min: 1, metric1__q1: 2, metric1__median: 3, metric1__q3: 4, metric1__max: 5, metric1__mean: 3.5, metric1__count: 10, metric1__outliers: [6, 7] },
+            { country: 'Canada', metric1__min: 2, metric1__q1: 3, metric1__median: 4, metric1__q3: 5, metric1__max: 6, metric1__mean: 4.5, metric1__count: 15, metric1__outliers: [7, 8] },
+          ],
+        },
+      ],
+    };
+
+    const transformedProps = transformProps(chartProps);
+
+    expect(transformedProps).toEqual(expect.objectContaining({
+      formData: chartProps.formData,
+      width: 800,
+      height: 600,
+      echartOptions: expect.objectContaining({
+        grid: expect.any(Object),
+        xAxis: expect.any(Object),
+        yAxis: expect.any(Object),
+        tooltip: expect.any(Object),
+        series: expect.any(Array),
+      }),
+      setDataMask: chartProps.hooks.setDataMask,
+      emitFilter: chartProps.formData.emitFilter,
+      labelMap: {
+        USA: ['USA'],
+        Canada: ['Canada'],
+      },
+      groupby: chartProps.formData.groupby,
+      selectedValues: {},
+    }));
+
+    const series = transformedProps.echartOptions.series;
+    expect(series).toHaveLength(3); // 2 outlier series + 1 boxplot series
+
+    // Verify series data structure
+    expect(series[0]).toEqual(expect.objectContaining({
+      name: 'boxplot',
+      type: 'boxplot',
+      data: expect.any(Array),
+    }));
+
+    expect(series[1]).toEqual(expect.objectContaining({
       name: 'outlier',
       type: 'scatter',
-      data: outlierDatum.map(val => [name, val]),
-      tooltip: {
-        fontSize: 11,
-        color: '#626D8A',
-        formatter: param => {
-          const [outlierName, stats] = param.data;
-          const headline = groupby ? `<p><strong>${outlierName}</strong></p>` : '';
-          return `${headline}${numberFormatter(stats)}`;
-        }
-      },
-      itemStyle: {
-        color: colorFn(groupbyLabel)
-      }
-    };
-  })).flat(2);
-  const labelMap = data.reduce((acc, datum) => {
-    const label = extractGroupbyLabel({
-      datum,
-      groupby,
-      coltypeMapping,
-      timeFormatter: getTimeFormatter(dateFormat)
-    });
-    return { ...acc,
-      [label]: groupby.map(col => datum[col])
-    };
-  }, {});
-  const selectedValues = (ownState.selectedValues || []).reduce((acc, selectedValue) => {
-    const index = transformedData.findIndex(({
-      name
-    }) => name === selectedValue);
-    return { ...acc,
-      [index]: selectedValue
-    };
-  }, {});
-  let axisLabel;
-  if (xTicksLayout === '45°') axisLabel = {
-    rotate: -45
-  };else if (xTicksLayout === '90°') axisLabel = {
-    rotate: -90
-  };else if (xTicksLayout === 'flat') axisLabel = {
-    rotate: 0
-  };else if (xTicksLayout === 'staggered') axisLabel = {
-    rotate: -45
-  };else axisLabel = {
-    show: true
-  };
-  const series = [{
-    name: 'boxplot',
-    type: 'boxplot',
-    data: transformedData,
-    tooltip: {
-      formatter: param => {
-        // @ts-ignore
-        const {
-          value,
-          name
-        } = param;
-        const headline = name ? `<p><strong>${name}</strong></p>` : '';
-        const stats = [`Max: ${numberFormatter(value[5])}`, `3rd Quartile: ${numberFormatter(value[4])}`, `Mean: ${numberFormatter(value[6])}`, `Median: ${numberFormatter(value[3])}`, `1st Quartile: ${numberFormatter(value[2])}`, `Min: ${numberFormatter(value[1])}`, `# Observations: ${numberFormatter(value[7])}`];
+      data: expect.any(Array),
+    }));
 
-        if (value[8].length > 0) {
-          stats.push(`# Outliers: ${numberFormatter(value[8].length)}`);
-        }
-
-        return headline + stats.join('<br/>');
-      }
-    }
-  }, // @ts-ignore
-  ...outlierData];
-  const echartOptions = {
-    grid: { ...defaultGrid,
-      top: 30,
-      bottom: 30,
-      left: 20,
-      right: 20
-    },
-    xAxis: {
-      type: 'category',
-      data: transformedData.map(row => row.name),
-      axisLabel: {...axisLabel,color: '#626D8A',fontSize: 11},
-      axisLine: {
-        lineStyle: {
-          color: '#EAEEF4'
-        }
-      }
-    },
-    yAxis: { ...defaultYAxis,
-      type: 'value',
-      axisLabel: {
-        formatter: numberFormatter,
-        color: '#626D8A',
-        fontSize: 11
-      },
-      axisLine: {
-        lineStyle: {
-          color: '#EAEEF4'
-        }
-      }
-    },
-    tooltip: { ...defaultTooltip,
-      trigger: 'item',
-      textStyle: {
-        fontSize: 11,
-        color: '#626D8A'
-      },
-      axisPointer: {
-        type: 'shadow'
-      }
-    },
-    series
-  };
-  return {
-    formData,
-    width,
-    height,
-    echartOptions,
-    setDataMask,
-    emitFilter,
-    labelMap,
-    groupby,
-    selectedValues
-  };
-}
+    expect(series[2]).toEqual(expect.objectContaining({
+      name: 'outlier',
+      type: 'scatter',
+      data: expect.any(Array),
+    }));
+  });
+});
