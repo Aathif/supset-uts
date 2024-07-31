@@ -1,98 +1,82 @@
-import transformProps from './transformProps';
-import { CategoricalColorNamespace, getNumberFormatter, getTimeFormatter } from '@superset-ui/core';
-import { extractGroupbyLabel, getColtypesMapping } from '../utils/series';
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import React, { useCallback } from 'react';
+import Echart from '../components/Echart';
+import { jsx as ___EmotionJSX } from "@emotion/react";
+export default function EchartsBoxPlot({
+  height,
+  width,
+  echartOptions,
+  setDataMask,
+  labelMap,
+  groupby,
+  selectedValues,
+  formData
+}) {
+  const handleChange = useCallback(values => {
+    if (!formData.emitFilter) {
+      return;
+    }
 
-jest.mock('@superset-ui/core', () => ({
-  CategoricalColorNamespace: {
-    getScale: jest.fn(() => jest.fn(() => '#ff0000')),
-  },
-  getMetricLabel: jest.fn(metric => metric),
-  getNumberFormatter: jest.fn(() => jest.fn(number => number.toString())),
-  getTimeFormatter: jest.fn(() => jest.fn(date => date.toString())),
-}));
-
-jest.mock('../utils/series', () => ({
-  extractGroupbyLabel: jest.fn(({ datum, groupby }) => groupby.map(col => datum[col]).join(',')),
-  getColtypesMapping: jest.fn(() => ({})),
-}));
-
-const defaultGrid = {};
-const defaultTooltip = {};
-const defaultYAxis = {};
-
-describe('transformProps', () => {
-  it('should transform props correctly', () => {
-    const chartProps = {
-      width: 800,
-      height: 600,
-      formData: {
-        colorScheme: 'd3Category10',
-        groupby: ['country'],
-        metrics: ['metric1'],
-        numberFormat: 'SMART_NUMBER',
-        dateFormat: 'smart_date',
-        xTicksLayout: '45°',
-        emitFilter: true,
+    const groupbyValues = values.map(value => labelMap[value]);
+    setDataMask({
+      extraFormData: {
+        filters: values.length === 0 ? [] : groupby.map((col, idx) => {
+          const val = groupbyValues.map(v => v[idx]);
+          if (val === null || val === undefined) return {
+            col,
+            op: 'IS NULL'
+          };
+          return {
+            col,
+            op: 'IN',
+            val: val
+          };
+        })
       },
-      hooks: {
-        setDataMask: jest.fn(),
+      filterState: {
+        value: groupbyValues.length ? groupbyValues : null
       },
       ownState: {
-        selectedValues: [],
-      },
-      queriesData: [
-        {
-          data: [
-            { country: 'USA', metric1__min: 1, metric1__q1: 2, metric1__median: 3, metric1__q3: 4, metric1__max: 5, metric1__mean: 3.5, metric1__count: 10, metric1__outliers: [6, 7] },
-            { country: 'Canada', metric1__min: 2, metric1__q1: 3, metric1__median: 4, metric1__q3: 5, metric1__max: 6, metric1__mean: 4.5, metric1__count: 15, metric1__outliers: [7, 8] },
-          ],
-        },
-      ],
-    };
+        selectedValues: values.length ? values : null
+      }
+    });
+  }, [groupby, labelMap, setDataMask, selectedValues]);
+  const eventHandlers = {
+    click: props => {
+      const {
+        name
+      } = props;
+      const values = Object.values(selectedValues);
 
-    const transformedProps = transformProps(chartProps);
-
-    expect(transformedProps).toEqual(expect.objectContaining({
-      formData: chartProps.formData,
-      width: 800,
-      height: 600,
-      echartOptions: expect.objectContaining({
-        grid: expect.any(Object),
-        xAxis: expect.any(Object),
-        yAxis: expect.any(Object),
-        tooltip: expect.any(Object),
-        series: expect.any(Array),
-      }),
-      setDataMask: chartProps.hooks.setDataMask,
-      emitFilter: chartProps.formData.emitFilter,
-      labelMap: {
-        USA: ['USA'],
-        Canada: ['Canada'],
-      },
-      groupby: chartProps.formData.groupby,
-      selectedValues: {},
-    }));
-
-    const series = transformedProps.echartOptions.series;
-    expect(series).toHaveLength(3); // 2 outlier series + 1 boxplot series
-
-    // Verify series data structure
-    expect(series[0]).toEqual(expect.objectContaining({
-      name: 'boxplot',
-      type: 'boxplot',
-      data: expect.any(Array),
-    }));
-
-    expect(series[1]).toEqual(expect.objectContaining({
-      name: 'outlier',
-      type: 'scatter',
-      data: expect.any(Array),
-    }));
-
-    expect(series[2]).toEqual(expect.objectContaining({
-      name: 'outlier',
-      type: 'scatter',
-      data: expect.any(Array),
-    }));
+      if (values.includes(name)) {
+        handleChange(values.filter(v => v !== name));
+      } else {
+        handleChange([...values, name]);
+      }
+    }
+  };
+  return ___EmotionJSX(Echart, {
+    height: height,
+    width: width,
+    echartOptions: echartOptions,
+    eventHandlers: eventHandlers,
+    selectedValues: selectedValues
   });
-});
+}
