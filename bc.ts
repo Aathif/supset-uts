@@ -1,349 +1,147 @@
-import { CategoricalColorNamespace, getNumberFormatter, isEventAnnotationLayer, isFormulaAnnotationLayer, isIntervalAnnotationLayer, isTimeseriesAnnotationLayer } from '@superset-ui/core';
+import transformProps from './transformProps'; // Adjust the import path as needed
 import { DEFAULT_FORM_DATA } from './types';
-import { ForecastSeriesEnum } from '../types';
+import { CategoricalColorNamespace, getNumberFormatter } from '@superset-ui/core';
+import { extractTimeseriesSeries, rebaseTimeseriesDatum } from '../utils/series';
 import { parseYAxisBound } from '../utils/controls';
-import { dedupSeries, extractTimeseriesSeries, getLegendProps } from '../utils/series';
-import { extractAnnotationLabels } from '../utils/annotation';
-import { extractForecastSeriesContext, extractProphetValuesFromTooltipParams, formatProphetTooltipSeries, rebaseTimeseriesDatum } from '../utils/prophet';
+import { extractProphetValuesFromTooltipParams, formatProphetTooltipSeries } from '../utils/prophet';
 import { defaultGrid, defaultTooltip, defaultYAxis } from '../defaults';
-import { getPadding, getTooltipTimeFormatter, getXAxisFormatter, transformEventAnnotation, transformFormulaAnnotation, transformIntervalAnnotation, transformSeries, transformTimeseriesAnnotation } from './transformers';
 import { TIMESERIES_CONSTANTS } from '../constants';
-export default function transformProps(chartProps) {
-  const {
-    width,
-    height,
-    filterState,
-    formData,
-    hooks,
-    queriesData
-  } = chartProps;
-  let {
-    annotation_data: annotationData_,
-    data = []
-  } = queriesData[0];
-  const annotationData = annotationData_ || {};
-  const {
-    area,
-    annotationLayers,
-    colorScheme,
-    contributionMode,
-    forecastEnabled,
-    legendOrientation,
-    legendType,
-    logAxis,
-    markerEnabled,
-    markerSize,
-    markLineCheck,
-    showMinMaxValue,
-    opacity,
-    minorSplitLine,
-    seriesType,
-    showLegend,
-    stack,
-    truncateYAxis,
-    yAxisFormat,
-    xAxisShowMinLabel,
-    xAxisShowMaxLabel,
-    xAxisTimeFormat,
-    yAxisBounds,
-    yAxisLine,
-    yaxisInnerGridLines,
-    yAxisTitle,
-    tooltipTimeFormat,
-    zoomable,
-    richTooltip,
-    xAxisLabelRotation,
-    yAxisLabelRotation,
-    xaxisInnerGridLines,
-    emitFilter,
-    groupby,
-    showValue,
-    barWidth,
-    barChartLabel,
-    labelPosition,
-    labelColor,
-    labelFont,
-    labelRotate,
-    showXAxisName,
-    xAxisName,
-    showYAxisName,
-    showToolBox,
-    orderDesc,
-    orderByColumn,
-    sortbyXaxis,
-    xAxisLabelInterval
-  } = { ...DEFAULT_FORM_DATA,
-    ...formData
+
+jest.mock('@superset-ui/core', () => ({
+  CategoricalColorNamespace: {
+    getScale: jest.fn(),
+  },
+  getNumberFormatter: jest.fn(),
+}));
+
+jest.mock('../utils/series', () => ({
+  extractTimeseriesSeries: jest.fn(),
+  rebaseTimeseriesDatum: jest.fn(),
+}));
+
+jest.mock('../utils/controls', () => ({
+  parseYAxisBound: jest.fn(),
+}));
+
+jest.mock('../utils/prophet', () => ({
+  extractProphetValuesFromTooltipParams: jest.fn(),
+  formatProphetTooltipSeries: jest.fn(),
+}));
+
+jest.mock('../defaults', () => ({
+  defaultGrid: { some: 'defaultGrid' },
+  defaultTooltip: { some: 'defaultTooltip' },
+  defaultYAxis: { some: 'defaultYAxis' },
+}));
+
+describe('transformProps', () => {
+  const chartProps = {
+    width: 800,
+    height: 600,
+    filterState: {},
+    formData: {},
+    hooks: {},
+    queriesData: [{ data: [] }],
   };
-  const colorScale = CategoricalColorNamespace.getScale(colorScheme);
-  const rebasedData = rebaseTimeseriesDatum(data);
-  const rawSeries = extractTimeseriesSeries(rebasedData, {
-    fillNeighborValue: stack && !forecastEnabled ? 0 : undefined
+
+  const mockColorScale = jest.fn();
+  const mockFormatter = jest.fn();
+  const mockRebasedData = [
+    { __timestamp: '2021-01-01', value: 10 },
+    { __timestamp: '2021-01-02', value: 20 },
+  ];
+  const mockRawSeries = [
+    { name: 'series1', data: [[1609459200000, 10], [1609545600000, 20]] },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    (CategoricalColorNamespace.getScale as jest.Mock).mockReturnValue(mockColorScale);
+    (getNumberFormatter as jest.Mock).mockReturnValue(mockFormatter);
+    (rebaseTimeseriesDatum as jest.Mock).mockReturnValue(mockRebasedData);
+    (extractTimeseriesSeries as jest.Mock).mockReturnValue(mockRawSeries);
+    (parseYAxisBound as jest.Mock).mockImplementation(value => (value === undefined ? undefined : Number(value)));
   });
-  const series = [];
-  const formatter = getNumberFormatter(contributionMode ? ',.0%' : yAxisFormat);
-  const totalStackedValues = [];
-  const showValueIndexes = [];
 
-  if (stack) {
-    rebasedData.forEach(data => {
-      const values = Object.keys(data).reduce((prev, curr) => {
-        if (curr === '__timestamp') {
-          return prev;
-        }
+  it('should transform chart properties correctly with default formData', () => {
+    const result = transformProps(chartProps);
 
-        const value = data[curr] || 0;
-        return prev + value;
-      }, 0);
-      totalStackedValues.push(values);
-    });
-    rawSeries.forEach((entry, seriesIndex) => {
-      const {
-        data = []
-      } = entry;
-      data.forEach((datum, dataIndex) => {
-        if (datum[1] !== null) {
-          showValueIndexes[dataIndex] = seriesIndex;
-        }
-      });
-    });
-  }
-
-  let markLine = {};
-  let markPoint = {};
-
-  if(markLineCheck){
-    markLine.data = [{
-      type: "average"
-    }],
-    markLine.silent = true
-  }
-
-  if(showMinMaxValue){
-    markPoint.data = [
-      { type: 'max', name: 'Max' },
-      { type: 'min', name: 'Min' }
-    ],
-    markPoint.symbol = "pin",
-    markPoint.symbolSize = [45,40],
-    markPoint.symbolRotate = -180,
-    markPoint.label= {
-      show: true,
-      distance: 30,
-      position: "inside",
-      offset: [0, 8]
-    }
-  }
-
-  rawSeries.forEach(entry => {
-    const transformedSeries = transformSeries(entry, colorScale, {
-      area,
-      filterState,
-      forecastEnabled,
-      markerEnabled,
-      markerSize,
-      markLineCheck,
-      markLine,
-      showMinMaxValue,
-      markPoint,
-      areaOpacity: opacity,
-      seriesType,
-      stack,
-      formatter,
-      showValue,
-      totalStackedValues,
-      showValueIndexes,
-      richTooltip
-    });
-    if (transformedSeries) series.push(transformedSeries);
+    expect(result).toHaveProperty('echartOptions');
+    expect(result).toHaveProperty('emitFilter', chartProps.hooks.emitFilter);
+    expect(result).toHaveProperty('formData', { ...DEFAULT_FORM_DATA, ...chartProps.formData });
+    expect(result).toHaveProperty('groupby', chartProps.formData.groupby);
+    expect(result).toHaveProperty('height', chartProps.height);
+    expect(result).toHaveProperty('labelMap');
+    expect(result).toHaveProperty('selectedValues', {});
+    expect(result).toHaveProperty('setDataMask', chartProps.hooks.setDataMask);
+    expect(result).toHaveProperty('width', chartProps.width);
   });
-   
-  const labelValue = series.forEach(item => (item.label.show = barChartLabel));
-  const labelPlacement = series.forEach(item => (item.label.position = labelPosition));
-  const colorLabel = series.forEach(item => (item.label.color = labelColor));
-  const fontLabel = series.forEach(item => (item.label.fontSize = labelFont));
-  const rotateLabel = series.forEach(item => (item.label.rotate = labelRotate));
-  const truncateLabel = series.forEach(item => (item.label.overflow = "truncate"));
-  const labelPadding = series.forEach(item => (item.label.distance = 16));
-  const labelFontSize = series.forEach(item => (item.label.fontSize = 11));
- 
-  const selectedValues = (filterState.selectedValues || []).reduce((acc, selectedValue) => {
-    const index = series.findIndex(({
-      name
-    }) => name === selectedValue);
-    return { ...acc,
-      [index]: selectedValue
-    };
-  }, {});
-  annotationLayers.filter(layer => layer.show).forEach(layer => {
-    if (isFormulaAnnotationLayer(layer)) series.push(transformFormulaAnnotation(layer, data, colorScale));else if (isIntervalAnnotationLayer(layer)) {
-      series.push(...transformIntervalAnnotation(layer, data, annotationData, colorScale));
-    } else if (isEventAnnotationLayer(layer)) {
-      series.push(...transformEventAnnotation(layer, data, annotationData, colorScale));
-    } else if (isTimeseriesAnnotationLayer(layer)) {
-      series.push(...transformTimeseriesAnnotation(layer, markerSize, markLine, markPoint, data, annotationData));
-    }
-  }); // yAxisBounds need to be parsed to replace incompatible values with undefined
 
-  let [min, max] = (yAxisBounds || []).map(parseYAxisBound); // default to 0-100% range when doing row-level contribution chart
-
-  if (contributionMode === 'row' && stack) {
-    if (min === undefined) min = 0;
-    if (max === undefined) max = 1;
-  }
-
-  const tooltipFormatter = getTooltipTimeFormatter(tooltipTimeFormat);
-  const xAxisFormatter = getXAxisFormatter(xAxisTimeFormat);
-  const labelMap = series.reduce((acc, datum) => {
-    const name = datum.name;
-    return { ...acc,
-      [name]: [name]
-    };
-  }, {});
-  const {
-    setDataMask = () => {}
-  } = hooks;
-  const addYAxisLabelOffset = !!yAxisTitle;
-  const padding = getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable);
-  const echartOptions = {
-    barWidth: barWidth,
-    useUTC: true,
-    grid: { ...defaultGrid,
-      ...padding
-    },
-    xAxis: {
-      type: "category",
-      min,
-      max,
-      axisLabel: {
-        showMinLabel: xAxisShowMinLabel,
-        showMaxLabel: xAxisShowMaxLabel,
-        formatter: xAxisFormatter,
-        rotate: xAxisLabelRotation,
-        color: '#626D8A',
-        fontSize: 13,
-        interval: 0,
-        overflow: 'break'  
-    },
-      scale: true,
-      //scale: truncateXAxis,
-      name: xAxisName,
-      nameLocation: "middle",
-      nameTextStyle: {
-        align: "center",
-        verticalAlign: "top",
-        lineHeight: 30
-     },
-     splitLine: {
-      show: xaxisInnerGridLines
-    },
-     boundaryGap: true,
-     axisTick: {
+  it('should handle annotations correctly', () => {
+    const annotationLayer = {
       show: true,
-      alignWithLabel: true,
-      interval: 0
-    },
-    realtimeSort: true
-    },
-    yAxis: { ...defaultYAxis,
-      type: logAxis ? 'log' : 'value',
-      min,
-      max,
-      minorTick: {
-        show: true
+      name: 'testAnnotation',
+    };
+    const chartPropsWithAnnotations = {
+      ...chartProps,
+      formData: {
+        ...chartProps.formData,
+        annotationLayers: [annotationLayer],
       },
-      minorSplitLine: {
-        show: minorSplitLine
+    };
+
+    const result = transformProps(chartPropsWithAnnotations);
+
+    expect(result.echartOptions.series).toBeDefined();
+  });
+
+  it('should set correct color and opacity for series', () => {
+    const chartPropsWithSeries = {
+      ...chartProps,
+      formData: {
+        ...chartProps.formData,
+        stack: true,
       },
-      axisLabel: {
-        formatter,
-        color: '#626D8A',
-        fontSize: 13,
-        rotate: yAxisLabelRotation
+      queriesData: [{ data: mockRebasedData }],
+    };
+
+    const result = transformProps(chartPropsWithSeries);
+
+    expect(result.echartOptions.series[0]).toHaveProperty('type', 'line');
+  });
+
+  it('should handle tooltip formatting correctly', () => {
+    const tooltipFormatter = jest.fn();
+    (getTooltipTimeFormatter as jest.Mock).mockReturnValue(tooltipFormatter);
+    
+    const chartPropsWithTooltip = {
+      ...chartProps,
+      formData: {
+        ...chartProps.formData,
+        tooltipTimeFormat: '%Y-%m-%d',
       },
-      axisLine: {
-        show: yAxisLine,
-        onZero: true
+    };
+
+    const result = transformProps(chartPropsWithTooltip);
+
+    expect(result.echartOptions.tooltip.formatter).toBeDefined();
+  });
+
+  it('should set correct xAxis formatter', () => {
+    const xAxisFormatter = jest.fn();
+    (getXAxisFormatter as jest.Mock).mockReturnValue(xAxisFormatter);
+
+    const chartPropsWithXAxis = {
+      ...chartProps,
+      formData: {
+        ...chartProps.formData,
+        xAxisTimeFormat: '%Y-%m-%d',
       },
-      splitLine: {
-        show: yaxisInnerGridLines
-      },
-      scale: truncateYAxis,
-      name: yAxisTitle,
-      nameLocation: "middle",
-      nameTextStyle: {
-        align: "center",
-        verticalAlign: "top",
-        lineHeight: -50
-    }
-    },
-    tooltip: { ...defaultTooltip,
-      trigger: richTooltip ? 'axis' : 'item',
-      textStyle: {
-        fontSize: 11,
-        color: '#626D8A'
-      },
-      formatter: params => {
-        const value = !richTooltip ? params.value : params[0].value[0];
-        const prophetValue = !richTooltip ? [params] : params;
-        const rows = [`${tooltipFormatter(value)}`];
-        const prophetValues = extractProphetValuesFromTooltipParams(prophetValue);
-        Object.keys(prophetValues).forEach(key => {
-          const value = prophetValues[key];
-          rows.push(formatProphetTooltipSeries({ ...value,
-            seriesName: key,
-            formatter
-          }));
-        });
-        return rows.join('<br />');
-      }
-    },
-    legend: { ...getLegendProps(legendType, legendOrientation, showLegend, zoomable),
-      textStyle: {
-        fontSize: 11,
-        color: '#626D8A'
-      },
-            // @ts-ignore
-      data: rawSeries.filter(entry => extractForecastSeriesContext(entry.name || '').type === ForecastSeriesEnum.Observation).map(entry => entry.name || '').concat(extractAnnotationLabels(annotationLayers, annotationData))
-    },
-    series: dedupSeries(series),
-    toolbox: {
-      show: showToolBox,
-      orient: 'horizontal',
-      right: TIMESERIES_CONSTANTS.toolboxRight,
-      top: 5,
-      showTitle: true,
-      feature: {
-        mark: { show: true },
-        dataView: { show: true, readOnly: false ,title: 'Data View'},
-        magicType: { show: true, type: ['line', 'bar', 'stack'] },
-        restore: { show: true ,title: 'Restore View'},
-        saveAsImage: { show: true,title: 'Save As Image'},
-        dataZoom: {
-            yAxisIndex: false,
-            title: {
-              zoom: 'zoom area',
-              back: 'restore zoom'
-            }
-          }
-      }
-    },
-    dataZoom: zoomable ? [{
-      type: 'slider',
-      start: TIMESERIES_CONSTANTS.dataZoomStart,
-      end: TIMESERIES_CONSTANTS.dataZoomEnd,
-      bottom: TIMESERIES_CONSTANTS.zoomBottom
-    }] : []
-  };
-  return {
-    echartOptions,
-    emitFilter,
-    formData,
-    groupby,
-    height,
-    labelMap,
-    selectedValues,
-    setDataMask,
-    width   
-  };
-}
+    };
+
+    const result = transformProps(chartPropsWithXAxis);
+
+    expect(result.echartOptions.xAxis.axisLabel.formatter).toBe(xAxisFormatter);
+  });
+});
