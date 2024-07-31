@@ -1,82 +1,81 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-import React, { useCallback } from 'react';
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import EchartsBoxPlot from './EchartsBoxPlot';
 import Echart from '../components/Echart';
-import { jsx as ___EmotionJSX } from "@emotion/react";
-export default function EchartsBoxPlot({
-  height,
-  width,
-  echartOptions,
-  setDataMask,
-  labelMap,
-  groupby,
-  selectedValues,
-  formData
-}) {
-  const handleChange = useCallback(values => {
-    if (!formData.emitFilter) {
-      return;
-    }
 
-    const groupbyValues = values.map(value => labelMap[value]);
-    setDataMask({
+jest.mock('../components/Echart', () => jest.fn(() => <div>Echart Component</div>));
+
+describe('EchartsBoxPlot', () => {
+  const mockSetDataMask = jest.fn();
+  const mockFormData = {
+    emitFilter: true,
+  };
+
+  const defaultProps = {
+    height: 600,
+    width: 800,
+    echartOptions: {},
+    setDataMask: mockSetDataMask,
+    labelMap: {
+      'label-1': ['value1'],
+    },
+    groupby: ['groupby1'],
+    selectedValues: {},
+    formData: mockFormData,
+  };
+
+  it('renders correctly', () => {
+    const { getByText } = render(<EchartsBoxPlot {...defaultProps} />);
+    expect(getByText('Echart Component')).toBeInTheDocument();
+  });
+
+  it('calls setDataMask with correct filters on click', () => {
+    const { getByText } = render(<EchartsBoxPlot {...defaultProps} />);
+    const echartComponent = getByText('Echart Component');
+
+    // Simulate click event
+    fireEvent.click(echartComponent);
+
+    expect(mockSetDataMask).toHaveBeenCalledWith({
       extraFormData: {
-        filters: values.length === 0 ? [] : groupby.map((col, idx) => {
-          const val = groupbyValues.map(v => v[idx]);
-          if (val === null || val === undefined) return {
-            col,
-            op: 'IS NULL'
-          };
-          return {
-            col,
-            op: 'IN',
-            val: val
-          };
-        })
+        filters: [{
+          col: 'groupby1',
+          op: 'IN',
+          val: ['value1'],
+        }],
       },
       filterState: {
-        value: groupbyValues.length ? groupbyValues : null
+        value: [['value1']],
       },
       ownState: {
-        selectedValues: values.length ? values : null
-      }
+        selectedValues: ['label-1'],
+      },
     });
-  }, [groupby, labelMap, setDataMask, selectedValues]);
-  const eventHandlers = {
-    click: props => {
-      const {
-        name
-      } = props;
-      const values = Object.values(selectedValues);
-
-      if (values.includes(name)) {
-        handleChange(values.filter(v => v !== name));
-      } else {
-        handleChange([...values, name]);
-      }
-    }
-  };
-  return ___EmotionJSX(Echart, {
-    height: height,
-    width: width,
-    echartOptions: echartOptions,
-    eventHandlers: eventHandlers,
-    selectedValues: selectedValues
   });
-}
+
+  it('calls handleChange with correct values on click', () => {
+    const { getByText } = render(<EchartsBoxPlot {...defaultProps} />);
+    const echartComponent = getByText('Echart Component');
+
+    // Simulate click event
+    fireEvent.click(echartComponent);
+
+    expect(mockSetDataMask).toHaveBeenCalledTimes(1);
+
+    // Simulate another click to deselect
+    fireEvent.click(echartComponent);
+
+    expect(mockSetDataMask).toHaveBeenCalledWith({
+      extraFormData: {
+        filters: [],
+      },
+      filterState: {
+        value: null,
+      },
+      ownState: {
+        selectedValues: null,
+      },
+    });
+  });
+});
