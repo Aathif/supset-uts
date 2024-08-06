@@ -1,99 +1,117 @@
-import {
-  AdhocFilter,
-  buildQueryContext,
-  QueryFormData,
-} from '@superset-ui/core';
-import { computeQueryBComparator } from '../utils';
+import { buildQueryContext } from '@superset-ui/core';
+import buildQuery from './path/to/your/buildQuery'; // Adjust the import path as needed
+import { computeQueryBComparator } from '../utils'; // Adjust the import path as needed
 
-/**
- * The buildQuery function is used to create an instance of QueryContext that's
- * sent to the chart data endpoint. In addition to containing information of which
- * datasource to use, it specifies the type (e.g. full payload, samples, query) and
- * format (e.g. CSV or JSON) of the result and whether or not to force refresh the data from
- * the datasource as opposed to using a cached copy of the data, if available.
- *
- * More importantly though, QueryContext contains a property `queries`, which is an array of
- * QueryObjects specifying individual data requests to be made. A QueryObject specifies which
- * columns, metrics and filters, among others, to use during the query. Usually it will be enough
- * to specify just one query based on the baseQueryObject, but for some more advanced use cases
- * it is possible to define post processing operations in the QueryObject, or multiple queries
- * if a viz needs multiple different result sets.
- */
+// Mock dependencies
+jest.mock('@superset-ui/core', () => ({
+  buildQueryContext: jest.fn(),
+}));
 
-export default function buildQuery(formData: QueryFormData) {
-  const {
-    cols: groupby,
-    time_comparison: timeComparison,
-    extra_form_data: extraFormData,
-  } = formData;
+jest.mock('../utils', () => ({
+  computeQueryBComparator: jest.fn(),
+}));
 
-  const queryContextA = buildQueryContext(formData, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      groupby,
-    },
-  ]);
+describe('buildQuery', () => {
+  beforeEach(() => {
+    // Reset mocks before each test
+    jest.resetAllMocks();
+  });
 
-  const timeFilterIndex: number =
-    formData.adhoc_filters?.findIndex(
-      filter => 'operator' in filter && filter.operator === 'TEMPORAL_RANGE',
-    ) ?? -1;
+  test('builds query context correctly without time comparison', () => {
+    const formData = {
+      cols: ['column1'],
+      time_comparison: 'c',
+      extra_form_data: {},
+      adhoc_filters: [{ operator: 'TEMPORAL_RANGE', comparator: 'last_week' }],
+      adhoc_custom: [{ operator: 'TEMPORAL_RANGE', comparator: 'last_month' }],
+    };
 
-  const timeFilter: AdhocFilter | null =
-    timeFilterIndex !== -1 && formData.adhoc_filters
-      ? formData.adhoc_filters[timeFilterIndex]
-      : null;
+    buildQueryContext.mockImplementation((fd, baseQuery) => ({
+      queries: baseQuery({
+        filters: fd.adhoc_filters,
+      }),
+    }));
 
-  let formDataB: QueryFormData;
-  let queryBComparator = null;
+    const result = buildQuery(formData);
 
-  if (timeComparison !== 'c') {
-    queryBComparator = computeQueryBComparator(
-      formData.adhoc_filters || [],
-      timeComparison,
-      extraFormData,
+    expect(buildQueryContext).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      queries: [
+        {
+          filters: [{ operator: 'TEMPORAL_RANGE', comparator: 'last_week' }],
+        },
+        {
+          filters: [{ operator: 'TEMPORAL_RANGE', comparator: 'last_month' }],
+        },
+      ],
+    });
+  });
+
+  test('builds query context correctly with time comparison', () => {
+    const formData = {
+      cols: ['column1'],
+      time_comparison: 'y',
+      extra_form_data: {},
+      adhoc_filters: [{ operator: 'TEMPORAL_RANGE', comparator: 'last_week' }],
+    };
+
+    computeQueryBComparator.mockReturnValue('last_year');
+
+    buildQueryContext.mockImplementation((fd, baseQuery) => ({
+      queries: baseQuery({
+        filters: fd.adhoc_filters,
+      }),
+    }));
+
+    const result = buildQuery(formData);
+
+    expect(computeQueryBComparator).toHaveBeenCalledWith(
+      [{ operator: 'TEMPORAL_RANGE', comparator: 'last_week' }],
+      'y',
+      {},
     );
+    expect(buildQueryContext).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      queries: [
+        {
+          filters: [{ operator: 'TEMPORAL_RANGE', comparator: 'last_week' }],
+        },
+        {
+          filters: [
+            { operator: 'TEMPORAL_RANGE', comparator: 'last_year' },
+          ],
+        },
+      ],
+    });
+  });
 
-    const queryBFilter: any = {
-      ...timeFilter,
-      comparator: queryBComparator,
+  test('handles missing adhoc_filters', () => {
+    const formData = {
+      cols: ['column1'],
+      time_comparison: 'c',
+      extra_form_data: {},
     };
 
-    const otherFilters = formData.adhoc_filters?.filter(
-      (_value: any, index: number) => timeFilterIndex !== index,
-    );
-    const queryBFilters = otherFilters
-      ? [queryBFilter, ...otherFilters]
-      : [queryBFilter];
+    buildQueryContext.mockImplementation((fd, baseQuery) => ({
+      queries: baseQuery({
+        filters: fd.adhoc_filters,
+      }),
+    }));
 
-    formDataB = {
-      ...formData,
-      adhoc_filters: queryBFilters,
-      extra_form_data: {
-        ...extraFormData,
-        time_range: undefined,
-      },
-    };
-  } else {
-    formDataB = {
-      ...formData,
-      adhoc_filters: formData.adhoc_custom,
-      extra_form_data: {
-        ...extraFormData,
-        time_range: undefined,
-      },
-    };
-  }
+    const result = buildQuery(formData);
 
-  const queryContextB = buildQueryContext(formDataB, baseQueryObject => [
-    {
-      ...baseQueryObject,
-      groupby,
-    },
-  ]);
+    expect(buildQueryContext).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({
+      queries: [
+        {
+          filters: undefined,
+        },
+        {
+          filters: undefined,
+        },
+      ],
+    });
+  });
 
-  return {
-    ...queryContextA,
-    queries: [...queryContextA.queries, ...queryContextB.queries],
-  };
-}
+  // Additional tests for other scenarios can be added here
+});
