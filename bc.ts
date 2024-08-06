@@ -1,5 +1,6 @@
-
+import transformProps from './path/to/your/transformProps'; // Adjust the import path as needed
 import { getMetricLabel, getValueFormatter, getNumberFormatter } from '@superset-ui/core';
+import moment from 'moment';
 import { parseMetricValue } from './path/to/your/parseMetricValue'; // Adjust the import path as needed
 
 // Mock dependencies
@@ -136,4 +137,12 @@ describe('transformProps', () => {
       headerFontSize: 20,
       subheaderFontSize: 14,
       headerText: 'Header',
-      compType:
+      compType: 'Year',
+      comparisonColorEnabled: true,
+      percentDifferenceNumber: 0,
+      comparatorText: ' ',
+    });
+  });
+
+  // Additional tests for other scenarios can be added here
+});
