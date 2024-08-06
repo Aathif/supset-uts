@@ -1,118 +1,139 @@
-import moment from 'moment';
-import {
-  ChartProps,
-  getMetricLabel,
-  getValueFormatter,
-  NumberFormats,
-  getNumberFormatter,
-} from '@superset-ui/core';
-import { computeQueryBComparator, formatCustomComparator } from '../utils';
 
-export const parseMetricValue = (metricValue: number | string | null) => {
-  if (typeof metricValue === 'string') {
-    const dateObject = moment.utc(metricValue, moment.ISO_8601, true);
-    if (dateObject.isValid()) {
-      return dateObject.valueOf();
-    }
-    return 0;
-  }
-  return metricValue ?? 0;
-};
+import { getMetricLabel, getValueFormatter, getNumberFormatter } from '@superset-ui/core';
+import { parseMetricValue } from './path/to/your/parseMetricValue'; // Adjust the import path as needed
 
-export default function transformProps(chartProps: ChartProps) {
-  const {
-    width,
-    height,
-    formData,
-    queriesData,
-    datasource: { currencyFormats = {}, columnFormats = {} },
-  } = chartProps;
-  const {
-    boldText,
-    headerFontSize,
-    headerText,
-    metrics,
-    yAxisFormat,
-    currencyFormat,
-    subheaderFontSize,
-    comparisonColorEnabled,
-  } = formData;
-  const { data: dataA = [] } = queriesData[0];
-  const { data: dataB = [] } = queriesData[1];
-  const data = dataA;
-  const metricName = getMetricLabel(metrics[0]);
-  let bigNumber: number | string =
-    data.length === 0 ? 0 : parseMetricValue(data[0][metricName]);
-  let prevNumber: number | string =
-    data.length === 0 ? 0 : parseMetricValue(dataB[0][metricName]);
+// Mock dependencies
+jest.mock('@superset-ui/core', () => ({
+  getMetricLabel: jest.fn(),
+  getValueFormatter: jest.fn(),
+  getNumberFormatter: jest.fn(),
+}));
 
-  const numberFormatter = getValueFormatter(
-    metrics[0],
-    currencyFormats,
-    columnFormats,
-    yAxisFormat,
-    currencyFormat,
-  );
+jest.mock('./path/to/your/parseMetricValue'); // Adjust the import path as needed
 
-  const compTitles = {
-    r: 'Range' as string,
-    y: 'Year' as string,
-    m: 'Month' as string,
-    w: 'Week' as string,
-  };
+describe('transformProps', () => {
+  beforeEach(() => {
+    // Reset mocks before each test
+    jest.resetAllMocks();
+  });
 
-  const formatPercentChange = getNumberFormatter(
-    NumberFormats.PERCENT_SIGNED_1_POINT,
-  );
+  test('transforms chartProps correctly', () => {
+    // Mock functions
+    getMetricLabel.mockReturnValue('metric_label');
+    getValueFormatter.mockReturnValue(value => `formatted_${value}`);
+    getNumberFormatter.mockReturnValue(value => `${value}%`);
+    parseMetricValue.mockImplementation(value => value);
 
-  let valueDifference: number | string = bigNumber - prevNumber;
+    // Mock data
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        boldText: true,
+        headerFontSize: 20,
+        headerText: 'Header',
+        metrics: ['metric'],
+        yAxisFormat: '.2f',
+        currencyFormat: 'USD',
+        subheaderFontSize: 14,
+        comparisonColorEnabled: true,
+        timeComparison: 'y',
+        adhocFilters: [],
+        extraFormData: {},
+        adhocCustom: '',
+      },
+      queriesData: [
+        {
+          data: [{ metric_label: 100 }],
+        },
+        {
+          data: [{ metric_label: 80 }],
+        },
+      ],
+      datasource: {
+        currencyFormats: {},
+        columnFormats: {},
+      },
+    };
 
-  let percentDifferenceNum;
+    const result = transformProps(chartProps);
 
-  if (!bigNumber && !prevNumber) {
-    percentDifferenceNum = 0;
-  } else if (!bigNumber || !prevNumber) {
-    percentDifferenceNum = bigNumber ? 1 : -1;
-  } else {
-    percentDifferenceNum = (bigNumber - prevNumber) / Math.abs(prevNumber);
-  }
+    // Assertions
+    expect(result).toEqual({
+      width: 800,
+      height: 600,
+      data: [{ metric_label: 100 }],
+      metrics: ['metric'],
+      metricName: 'metric_label',
+      bigNumber: 'formatted_100',
+      prevNumber: 'formatted_80',
+      valueDifference: 'formatted_20',
+      percentDifferenceFormattedString: '25%',
+      boldText: true,
+      headerFontSize: 20,
+      subheaderFontSize: 14,
+      headerText: 'Header',
+      compType: 'Year',
+      comparisonColorEnabled: true,
+      percentDifferenceNumber: 0.25,
+      comparatorText: ' ',
+    });
+  });
 
-  const compType = compTitles[formData.timeComparison];
-  bigNumber = numberFormatter(bigNumber);
-  prevNumber = numberFormatter(prevNumber);
-  valueDifference = numberFormatter(valueDifference);
-  const percentDifference: string = formatPercentChange(percentDifferenceNum);
-  const comparatorText =
-    formData.timeComparison !== 'c'
-      ? ` ${computeQueryBComparator(
-          formData.adhocFilters,
-          formData.timeComparison,
-          formData.extraFormData,
-          ' - ',
-        )}`
-      : `${formatCustomComparator(
-          formData.adhocCustom,
-          formData.extraFormData,
-        )}`;
+  test('handles empty data', () => {
+    // Mock functions
+    getMetricLabel.mockReturnValue('metric_label');
+    getValueFormatter.mockReturnValue(value => `formatted_${value}`);
+    getNumberFormatter.mockReturnValue(value => `${value}%`);
+    parseMetricValue.mockImplementation(value => value);
 
-  return {
-    width,
-    height,
-    data,
-    // and now your control data, manipulated as needed, and passed through as props!
-    metrics,
-    metricName,
-    bigNumber,
-    prevNumber,
-    valueDifference,
-    percentDifferenceFormattedString: percentDifference,
-    boldText,
-    headerFontSize,
-    subheaderFontSize,
-    headerText,
-    compType,
-    comparisonColorEnabled,
-    percentDifferenceNumber: percentDifferenceNum,
-    comparatorText,
-  };
-}
+    // Mock data
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        boldText: true,
+        headerFontSize: 20,
+        headerText: 'Header',
+        metrics: ['metric'],
+        yAxisFormat: '.2f',
+        currencyFormat: 'USD',
+        subheaderFontSize: 14,
+        comparisonColorEnabled: true,
+        timeComparison: 'y',
+        adhocFilters: [],
+        extraFormData: {},
+        adhocCustom: '',
+      },
+      queriesData: [
+        {
+          data: [],
+        },
+        {
+          data: [],
+        },
+      ],
+      datasource: {
+        currencyFormats: {},
+        columnFormats: {},
+      },
+    };
+
+    const result = transformProps(chartProps);
+
+    // Assertions
+    expect(result).toEqual({
+      width: 800,
+      height: 600,
+      data: [],
+      metrics: ['metric'],
+      metricName: 'metric_label',
+      bigNumber: 'formatted_0',
+      prevNumber: 'formatted_0',
+      valueDifference: 'formatted_0',
+      percentDifferenceFormattedString: '0%',
+      boldText: true,
+      headerFontSize: 20,
+      subheaderFontSize: 14,
+      headerText: 'Header',
+      compType:
