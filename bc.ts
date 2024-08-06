@@ -1,148 +1,99 @@
-import transformProps from './path/to/your/transformProps'; // Adjust the import path as needed
-import { getMetricLabel, getValueFormatter, getNumberFormatter } from '@superset-ui/core';
-import moment from 'moment';
-import { parseMetricValue } from './path/to/your/parseMetricValue'; // Adjust the import path as needed
+import {
+  AdhocFilter,
+  buildQueryContext,
+  QueryFormData,
+} from '@superset-ui/core';
+import { computeQueryBComparator } from '../utils';
 
-// Mock dependencies
-jest.mock('@superset-ui/core', () => ({
-  getMetricLabel: jest.fn(),
-  getValueFormatter: jest.fn(),
-  getNumberFormatter: jest.fn(),
-}));
+/**
+ * The buildQuery function is used to create an instance of QueryContext that's
+ * sent to the chart data endpoint. In addition to containing information of which
+ * datasource to use, it specifies the type (e.g. full payload, samples, query) and
+ * format (e.g. CSV or JSON) of the result and whether or not to force refresh the data from
+ * the datasource as opposed to using a cached copy of the data, if available.
+ *
+ * More importantly though, QueryContext contains a property `queries`, which is an array of
+ * QueryObjects specifying individual data requests to be made. A QueryObject specifies which
+ * columns, metrics and filters, among others, to use during the query. Usually it will be enough
+ * to specify just one query based on the baseQueryObject, but for some more advanced use cases
+ * it is possible to define post processing operations in the QueryObject, or multiple queries
+ * if a viz needs multiple different result sets.
+ */
 
-jest.mock('./path/to/your/parseMetricValue'); // Adjust the import path as needed
+export default function buildQuery(formData: QueryFormData) {
+  const {
+    cols: groupby,
+    time_comparison: timeComparison,
+    extra_form_data: extraFormData,
+  } = formData;
 
-describe('transformProps', () => {
-  beforeEach(() => {
-    // Reset mocks before each test
-    jest.resetAllMocks();
-  });
+  const queryContextA = buildQueryContext(formData, baseQueryObject => [
+    {
+      ...baseQueryObject,
+      groupby,
+    },
+  ]);
 
-  test('transforms chartProps correctly', () => {
-    // Mock functions
-    getMetricLabel.mockReturnValue('metric_label');
-    getValueFormatter.mockReturnValue(value => `formatted_${value}`);
-    getNumberFormatter.mockReturnValue(value => `${value}%`);
-    parseMetricValue.mockImplementation(value => value);
+  const timeFilterIndex: number =
+    formData.adhoc_filters?.findIndex(
+      filter => 'operator' in filter && filter.operator === 'TEMPORAL_RANGE',
+    ) ?? -1;
 
-    // Mock data
-    const chartProps = {
-      width: 800,
-      height: 600,
-      formData: {
-        boldText: true,
-        headerFontSize: 20,
-        headerText: 'Header',
-        metrics: ['metric'],
-        yAxisFormat: '.2f',
-        currencyFormat: 'USD',
-        subheaderFontSize: 14,
-        comparisonColorEnabled: true,
-        timeComparison: 'y',
-        adhocFilters: [],
-        extraFormData: {},
-        adhocCustom: '',
-      },
-      queriesData: [
-        {
-          data: [{ metric_label: 100 }],
-        },
-        {
-          data: [{ metric_label: 80 }],
-        },
-      ],
-      datasource: {
-        currencyFormats: {},
-        columnFormats: {},
-      },
+  const timeFilter: AdhocFilter | null =
+    timeFilterIndex !== -1 && formData.adhoc_filters
+      ? formData.adhoc_filters[timeFilterIndex]
+      : null;
+
+  let formDataB: QueryFormData;
+  let queryBComparator = null;
+
+  if (timeComparison !== 'c') {
+    queryBComparator = computeQueryBComparator(
+      formData.adhoc_filters || [],
+      timeComparison,
+      extraFormData,
+    );
+
+    const queryBFilter: any = {
+      ...timeFilter,
+      comparator: queryBComparator,
     };
 
-    const result = transformProps(chartProps);
+    const otherFilters = formData.adhoc_filters?.filter(
+      (_value: any, index: number) => timeFilterIndex !== index,
+    );
+    const queryBFilters = otherFilters
+      ? [queryBFilter, ...otherFilters]
+      : [queryBFilter];
 
-    // Assertions
-    expect(result).toEqual({
-      width: 800,
-      height: 600,
-      data: [{ metric_label: 100 }],
-      metrics: ['metric'],
-      metricName: 'metric_label',
-      bigNumber: 'formatted_100',
-      prevNumber: 'formatted_80',
-      valueDifference: 'formatted_20',
-      percentDifferenceFormattedString: '25%',
-      boldText: true,
-      headerFontSize: 20,
-      subheaderFontSize: 14,
-      headerText: 'Header',
-      compType: 'Year',
-      comparisonColorEnabled: true,
-      percentDifferenceNumber: 0.25,
-      comparatorText: ' ',
-    });
-  });
-
-  test('handles empty data', () => {
-    // Mock functions
-    getMetricLabel.mockReturnValue('metric_label');
-    getValueFormatter.mockReturnValue(value => `formatted_${value}`);
-    getNumberFormatter.mockReturnValue(value => `${value}%`);
-    parseMetricValue.mockImplementation(value => value);
-
-    // Mock data
-    const chartProps = {
-      width: 800,
-      height: 600,
-      formData: {
-        boldText: true,
-        headerFontSize: 20,
-        headerText: 'Header',
-        metrics: ['metric'],
-        yAxisFormat: '.2f',
-        currencyFormat: 'USD',
-        subheaderFontSize: 14,
-        comparisonColorEnabled: true,
-        timeComparison: 'y',
-        adhocFilters: [],
-        extraFormData: {},
-        adhocCustom: '',
-      },
-      queriesData: [
-        {
-          data: [],
-        },
-        {
-          data: [],
-        },
-      ],
-      datasource: {
-        currencyFormats: {},
-        columnFormats: {},
+    formDataB = {
+      ...formData,
+      adhoc_filters: queryBFilters,
+      extra_form_data: {
+        ...extraFormData,
+        time_range: undefined,
       },
     };
+  } else {
+    formDataB = {
+      ...formData,
+      adhoc_filters: formData.adhoc_custom,
+      extra_form_data: {
+        ...extraFormData,
+        time_range: undefined,
+      },
+    };
+  }
 
-    const result = transformProps(chartProps);
+  const queryContextB = buildQueryContext(formDataB, baseQueryObject => [
+    {
+      ...baseQueryObject,
+      groupby,
+    },
+  ]);
 
-    // Assertions
-    expect(result).toEqual({
-      width: 800,
-      height: 600,
-      data: [],
-      metrics: ['metric'],
-      metricName: 'metric_label',
-      bigNumber: 'formatted_0',
-      prevNumber: 'formatted_0',
-      valueDifference: 'formatted_0',
-      percentDifferenceFormattedString: '0%',
-      boldText: true,
-      headerFontSize: 20,
-      subheaderFontSize: 14,
-      headerText: 'Header',
-      compType: 'Year',
-      comparisonColorEnabled: true,
-      percentDifferenceNumber: 0,
-      comparatorText: ' ',
-    });
-  });
-
-  // Additional tests for other scenarios can be added here
-});
+  return {
+    ...queryContextA,
+    queries: [...queryContextA.queries, ...queryContextB.queries],
+  };
+}
