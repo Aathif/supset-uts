@@ -1,164 +1,96 @@
-import React, { useMemo, useState } from 'react';
-import {
-  ChartDataResponseResult,
-  useTheme,
-  t,
-  GenericDataType,
-} from '@superset-ui/core';
+import React from 'react';
+import { render, fireEvent, screen } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import { ThemeProvider, supersetTheme, ChartDataResponseResult, GenericDataType } from '@superset-ui/core';
+import ColumnConfigControl from './ColumnConfigControl'; // Adjust the import path as needed
+import { ColumnConfig } from './types';
 import ControlHeader from '../../../components/ControlHeader';
-import { ControlComponentProps } from '../types';
 
-import ColumnConfigItem from './ColumnConfigItem';
-import {
-  ColumnConfigInfo,
-  ColumnConfig,
-  ColumnConfigFormLayout,
-} from './types';
-import { DEFAULT_CONFIG_FORM_LAYOUT } from './constants';
-import { COLUMN_NAME_ALIASES } from '../../../constants';
+jest.mock('../../../components/ControlHeader', () => jest.fn(() => <div>Control Header</div>));
 
-export type ColumnConfigControlProps<T extends ColumnConfig> =
-  ControlComponentProps<Record<string, T>> & {
-    queryResponse?: ChartDataResponseResult;
-    configFormLayout?: ColumnConfigFormLayout;
-    appliedColumnNames?: string[];
-    emitFilter: boolean;
+const renderWithTheme = (ui, { theme = supersetTheme, ...options } = {}) => {
+  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>, options);
+};
+
+describe('ColumnConfigControl', () => {
+  const onChangeMock = jest.fn();
+
+  const defaultProps = {
+    onChange: onChangeMock,
+    value: { col1: { key: 'value1' } },
+    emitFilter: false,
+    queryResponse: {
+      colnames: ['col1', 'col2'],
+      coltypes: [GenericDataType.STRING, GenericDataType.NUMERIC],
+    },
   };
 
-/**
- * Max number of columns to show by default.
- */
-const MAX_NUM_COLS = 10;
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
-/**
- * Add per-column config to queried results.
- */
-export default function ColumnConfigControl<T extends ColumnConfig>({
-  queryResponse,
-  appliedColumnNames = [],
-  value,
-  onChange,
-  configFormLayout = DEFAULT_CONFIG_FORM_LAYOUT,
-  emitFilter,
-  ...props
-}: ColumnConfigControlProps<T>) {
-  if (emitFilter) {
-    Object.values(configFormLayout).forEach(array_of_array => {
-      if (!array_of_array.some(arr => arr.includes('emitTarget'))) {
-        array_of_array.push(['emitTarget']);
-      }
-    });
-  } else {
-    Object.values(configFormLayout).forEach(array_of_array => {
-      const index = array_of_array.findIndex(arr => arr.includes('emitTarget'));
-      if (index > -1) {
-        array_of_array.splice(index, 1);
-      }
-    });
-  }
+  test('renders correctly', () => {
+    const { container } = renderWithTheme(<ColumnConfigControl {...defaultProps} />);
+    expect(container).toMatchSnapshot();
+  });
 
-  const { colnames: _colnames, coltypes: _coltypes } = queryResponse || {};
-  let colnames: string[] = [];
-  let coltypes: GenericDataType[] = [];
-  if (appliedColumnNames.length === 0) {
-    colnames = _colnames || [];
-    coltypes = _coltypes || [];
-  } else {
-    const appliedCol = new Set(appliedColumnNames);
-    _colnames?.forEach((col, idx) => {
-      if (appliedCol.has(col)) {
-        colnames.push(col);
-        coltypes.push(_coltypes?.[idx] as GenericDataType);
-      }
-    });
-  }
-  const theme = useTheme();
-  const columnConfigs = useMemo(() => {
-    const configs: Record<string, ColumnConfigInfo> = {};
-    colnames?.forEach((col, idx) => {
-      configs[col] = {
-        name: COLUMN_NAME_ALIASES[col] || col,
-        type: coltypes?.[idx],
-        config: value?.[col] || {},
-      };
-    });
-    return configs;
-  }, [value, colnames, coltypes]);
-  const [showAllColumns, setShowAllColumns] = useState(false);
+  test('calls onChange with the correct value when a column config is updated', () => {
+    renderWithTheme(<ColumnConfigControl {...defaultProps} />);
 
-  const getColumnInfo = (col: string) => columnConfigs[col] || {};
-  const setColumnConfig = (col: string, config: T) => {
-    if (onChange) {
-      // Only keep configs for known columns
-      const validConfigs: Record<string, T> =
-        colnames && value
-          ? Object.fromEntries(
-              Object.entries(value).filter(([key]) => colnames.includes(key)),
-            )
-          : { ...value };
-      onChange({
-        ...validConfigs,
-        [col]: config,
-      });
-    }
-  };
+    const columnConfigItem = screen.getByText('col1'); // Adjust if necessary to select the right element
+    fireEvent.change(columnConfigItem, { target: { value: 'newValue' } });
 
-  if (!colnames || colnames.length === 0) return null;
+    expect(onChangeMock).toHaveBeenCalledWith({ col1: 'newValue' });
+  });
 
-  const needShowMoreButton = colnames.length > MAX_NUM_COLS + 2;
-  const cols =
-    needShowMoreButton && !showAllColumns
-      ? colnames.slice(0, MAX_NUM_COLS)
-      : colnames;
+  test('handles the show all columns functionality correctly', () => {
+    const longColnames = Array.from({ length: 20 }, (_, i) => `col${i + 1}`);
+    const queryResponse = {
+      colnames: longColnames,
+      coltypes: longColnames.map(() => GenericDataType.STRING),
+    };
 
-  return (
-    <>
-      <ControlHeader {...props} />
-      <div
-        css={{
-          border: `1px solid ${theme.colors.grayscale.light2}`,
-          borderRadius: theme.gridUnit,
-        }}
-      >
-        {cols.map(col => (
-          <ColumnConfigItem
-            key={col}
-            column={getColumnInfo(col)}
-            onChange={config => setColumnConfig(col, config as T)}
-            configFormLayout={configFormLayout}
-            cols={cols}
-          />
-        ))}
-        {needShowMoreButton && (
-          <div
-            role="button"
-            tabIndex={-1}
-            css={{
-              padding: theme.gridUnit * 2,
-              textAlign: 'center',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              fontSize: theme.typography.sizes.xs,
-              color: theme.colors.text.label,
-              ':hover': {
-                backgroundColor: theme.colors.grayscale.light4,
-              },
-            }}
-            onClick={() => setShowAllColumns(!showAllColumns)}
-          >
-            {showAllColumns ? (
-              <>
-                <i className="fa fa-angle-up" /> &nbsp; {t('Show less columns')}
-              </>
-            ) : (
-              <>
-                <i className="fa fa-angle-down" /> &nbsp;
-                {t('Show all columns')}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
+    renderWithTheme(
+      <ColumnConfigControl {...defaultProps} queryResponse={queryResponse} />
+    );
+
+    // Verify initial state (show limited columns)
+    expect(screen.queryByText('col11')).not.toBeInTheDocument();
+
+    // Show all columns
+    fireEvent.click(screen.getByRole('button', { name: /Show all columns/i }));
+    expect(screen.getByText('col11')).toBeInTheDocument();
+
+    // Show less columns
+    fireEvent.click(screen.getByRole('button', { name: /Show less columns/i }));
+    expect(screen.queryByText('col11')).not.toBeInTheDocument();
+  });
+
+  test('renders with emitFilter correctly modifying configFormLayout', () => {
+    const configFormLayout = {
+      layout: [['someField']],
+    };
+
+    renderWithTheme(
+      <ColumnConfigControl
+        {...defaultProps}
+        emitFilter
+        configFormLayout={configFormLayout}
+      />
+    );
+
+    // Verify emitTarget was added
+    expect(configFormLayout.layout.some(arr => arr.includes('emitTarget'))).toBe(true);
+
+    renderWithTheme(
+      <ColumnConfigControl
+        {...defaultProps}
+        emitFilter={false}
+        configFormLayout={configFormLayout}
+      />
+    );
+
+    // Verify emitTarget was removed
+    expect(configFormLayout.layout.some(arr => arr.includes('emitTarget'))).toBe(false);
+  });
+});
