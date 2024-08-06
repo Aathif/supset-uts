@@ -1,82 +1,118 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
-import { SafeMarkdown } from '@superset-ui/core';
-import HandlebarsViewer from './HandlebarsViewer'; // Adjust the import path as needed
+import moment from 'moment';
+import {
+  ChartProps,
+  getMetricLabel,
+  getValueFormatter,
+  NumberFormats,
+  getNumberFormatter,
+} from '@superset-ui/core';
+import { computeQueryBComparator, formatCustomComparator } from '../utils';
 
-jest.mock('@superset-ui/core', () => ({
-  ...jest.requireActual('@superset-ui/core'),
-  SafeMarkdown: jest.fn(({ source }) => <div>{source}</div>),
-}));
+export const parseMetricValue = (metricValue: number | string | null) => {
+  if (typeof metricValue === 'string') {
+    const dateObject = moment.utc(metricValue, moment.ISO_8601, true);
+    if (dateObject.isValid()) {
+      return dateObject.valueOf();
+    }
+    return 0;
+  }
+  return metricValue ?? 0;
+};
 
-describe('HandlebarsViewer', () => {
-  const templateSource = 'Hello, {{name}}!';
-  const data = { name: 'John' };
-  const mockGetElementById = jest.fn();
+export default function transformProps(chartProps: ChartProps) {
+  const {
+    width,
+    height,
+    formData,
+    queriesData,
+    datasource: { currencyFormats = {}, columnFormats = {} },
+  } = chartProps;
+  const {
+    boldText,
+    headerFontSize,
+    headerText,
+    metrics,
+    yAxisFormat,
+    currencyFormat,
+    subheaderFontSize,
+    comparisonColorEnabled,
+  } = formData;
+  const { data: dataA = [] } = queriesData[0];
+  const { data: dataB = [] } = queriesData[1];
+  const data = dataA;
+  const metricName = getMetricLabel(metrics[0]);
+  let bigNumber: number | string =
+    data.length === 0 ? 0 : parseMetricValue(data[0][metricName]);
+  let prevNumber: number | string =
+    data.length === 0 ? 0 : parseMetricValue(dataB[0][metricName]);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetElementById.mockReturnValue({
-      getAttribute: jest.fn().mockReturnValue('{}'),
-    });
-    document.getElementById = mockGetElementById;
-  });
+  const numberFormatter = getValueFormatter(
+    metrics[0],
+    currencyFormats,
+    columnFormats,
+    yAxisFormat,
+    currencyFormat,
+  );
 
-  test('renders correctly with valid template and data', () => {
-    render(<HandlebarsViewer templateSource={templateSource} data={data} />);
+  const compTitles = {
+    r: 'Range' as string,
+    y: 'Year' as string,
+    m: 'Month' as string,
+    w: 'Week' as string,
+  };
 
-    expect(screen.getByText('Hello, John!')).toBeInTheDocument();
-  });
+  const formatPercentChange = getNumberFormatter(
+    NumberFormats.PERCENT_SIGNED_1_POINT,
+  );
 
-  test('displays error message when template processing fails', () => {
-    const invalidTemplateSource = 'Hello, {{#if name}} {{name}}!';
-    render(<HandlebarsViewer templateSource={invalidTemplateSource} data={data} />);
+  let valueDifference: number | string = bigNumber - prevNumber;
 
-    expect(screen.getByText(/Parse error/)).toBeInTheDocument();
-  });
+  let percentDifferenceNum;
 
-  test('displays loading message initially', () => {
-    render(<HandlebarsViewer templateSource="" data={{}} />);
+  if (!bigNumber && !prevNumber) {
+    percentDifferenceNum = 0;
+  } else if (!bigNumber || !prevNumber) {
+    percentDifferenceNum = bigNumber ? 1 : -1;
+  } else {
+    percentDifferenceNum = (bigNumber - prevNumber) / Math.abs(prevNumber);
+  }
 
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
-  });
+  const compType = compTitles[formData.timeComparison];
+  bigNumber = numberFormatter(bigNumber);
+  prevNumber = numberFormatter(prevNumber);
+  valueDifference = numberFormatter(valueDifference);
+  const percentDifference: string = formatPercentChange(percentDifferenceNum);
+  const comparatorText =
+    formData.timeComparison !== 'c'
+      ? ` ${computeQueryBComparator(
+          formData.adhocFilters,
+          formData.timeComparison,
+          formData.extraFormData,
+          ' - ',
+        )}`
+      : `${formatCustomComparator(
+          formData.adhocCustom,
+          formData.extraFormData,
+        )}`;
 
-  test('calls SafeMarkdown with correct props', () => {
-    render(<HandlebarsViewer templateSource={templateSource} data={data} />);
-
-    expect(SafeMarkdown).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'Hello, John!',
-        htmlSanitization: true,
-        htmlSchemaOverrides: {},
-      }),
-      {}
-    );
-  });
-
-  test('handles custom HTML sanitization settings', () => {
-    mockGetElementById.mockReturnValueOnce({
-      getAttribute: jest.fn().mockReturnValue(
-        JSON.stringify({
-          common: {
-            conf: {
-              HTML_SANITIZATION: false,
-              HTML_SANITIZATION_SCHEMA_EXTENSIONS: { custom: 'schema' },
-            },
-          },
-        })
-      ),
-    });
-
-    render(<HandlebarsViewer templateSource={templateSource} data={data} />);
-
-    expect(SafeMarkdown).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'Hello, John!',
-        htmlSanitization: false,
-        htmlSchemaOverrides: { custom: 'schema' },
-      }),
-      {}
-    );
-  });
-});
+  return {
+    width,
+    height,
+    data,
+    // and now your control data, manipulated as needed, and passed through as props!
+    metrics,
+    metricName,
+    bigNumber,
+    prevNumber,
+    valueDifference,
+    percentDifferenceFormattedString: percentDifference,
+    boldText,
+    headerFontSize,
+    subheaderFontSize,
+    headerText,
+    compType,
+    comparisonColorEnabled,
+    percentDifferenceNumber: percentDifferenceNum,
+    comparatorText,
+  };
+}
