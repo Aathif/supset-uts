@@ -1,113 +1,31 @@
-import buildQuery from './buildQuery';
-import { buildQueryContext, getMetricLabel } from '@superset-ui/core';
+import moment from 'moment';
 
-jest.mock('@superset-ui/core', () => ({
-  buildQueryContext: jest.fn((formData, callback) => callback({ columns: [], metrics: [] })),
-  getMetricLabel: jest.fn(metric => metric),
-}));
-
-describe('buildQuery', () => {
-  it('should build query context for Tukey whisker options', () => {
-    const formData = {
-      whiskerOptions: 'Tukey',
-      columns: ['col1', 'col2'],
-      metrics: ['metric1'],
-      distributionColumns: ['col2'],
-    };
-
-    const result = buildQuery(formData);
-    
-    expect(buildQueryContext).toHaveBeenCalledWith(formData, expect.any(Function));
-    expect(result).toEqual([
-      {
-        columns: ['col1', 'col2'],
-        metrics: ['metric1'],
-        is_timeseries: false,
-        post_processing: [
-          {
-            operation: 'boxplot',
-            options: {
-              whisker_type: 'tukey',
-              percentiles: undefined,
-              groupby: ['col1'],
-              metrics: ['metric1'],
-            },
-          },
-        ],
-      },
-    ]);
+describe('parseMetricValue', () => {
+  test('returns timestamp for valid ISO 8601 date string', () => {
+    const dateString = '2023-08-06T12:00:00Z';
+    const expectedTimestamp = moment.utc(dateString).valueOf();
+    expect(parseMetricValue(dateString)).toBe(expectedTimestamp);
   });
 
-  it('should build query context for Min/max whisker options', () => {
-    const formData = {
-      whiskerOptions: 'Min/max (no outliers)',
-      columns: ['col1', 'col2'],
-      metrics: ['metric1'],
-      distributionColumns: ['col2'],
-    };
-
-    const result = buildQuery(formData);
-    
-    expect(buildQueryContext).toHaveBeenCalledWith(formData, expect.any(Function));
-    expect(result).toEqual([
-      {
-        columns: ['col1', 'col2'],
-        metrics: ['metric1'],
-        is_timeseries: false,
-        post_processing: [
-          {
-            operation: 'boxplot',
-            options: {
-              whisker_type: 'min/max',
-              percentiles: undefined,
-              groupby: ['col1'],
-              metrics: ['metric1'],
-            },
-          },
-        ],
-      },
-    ]);
+  test('returns 0 for invalid date string', () => {
+    const invalidDateString = 'invalid-date';
+    expect(parseMetricValue(invalidDateString)).toBe(0);
   });
 
-  it('should build query context for percentile whisker options', () => {
-    const formData = {
-      whiskerOptions: '10/90 percentiles',
-      columns: ['col1', 'col2'],
-      metrics: ['metric1'],
-      distributionColumns: ['col2'],
-    };
-
-    const result = buildQuery(formData);
-    
-    expect(buildQueryContext).toHaveBeenCalledWith(formData, expect.any(Function));
-    expect(result).toEqual([
-      {
-        columns: ['col1', 'col2'],
-        metrics: ['metric1'],
-        is_timeseries: false,
-        post_processing: [
-          {
-            operation: 'boxplot',
-            options: {
-              whisker_type: 'percentile',
-              percentiles: [10, 90],
-              groupby: ['col1'],
-              metrics: ['metric1'],
-            },
-          },
-        ],
-      },
-    ]);
+  test('returns the same number when metricValue is a number', () => {
+    const numberValue = 42;
+    expect(parseMetricValue(numberValue)).toBe(numberValue);
   });
 
-  it('should throw an error for unsupported whisker options', () => {
-    const formData = {
-      whiskerOptions: 'Unsupported',
-      columns: ['col1', 'col2'],
-      metrics: ['metric1'],
-      distributionColumns: ['col2'],
-    };
+  test('returns 0 when metricValue is null', () => {
+    expect(parseMetricValue(null)).toBe(0);
+  });
 
-    expect(() => buildQuery(formData)).toThrowError('Unsupported whisker type: Unsupported');
+  test('returns 0 when metricValue is undefined', () => {
+    expect(parseMetricValue(undefined)).toBe(0);
+  });
+
+  test('returns 0 for empty string', () => {
+    expect(parseMetricValue('')).toBe(0);
   });
 });
