@@ -1,123 +1,164 @@
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
-import ControlForm, { ControlFormRow } from './ControlForm'; // Adjust the import path as needed
-import { ThemeProvider, supersetTheme } from '@superset-ui/core';
+import React, { useMemo, useState } from 'react';
+import {
+  ChartDataResponseResult,
+  useTheme,
+  t,
+  GenericDataType,
+} from '@superset-ui/core';
+import ControlHeader from '../../../components/ControlHeader';
+import { ControlComponentProps } from '../types';
 
-const renderWithTheme = (ui, { theme = supersetTheme, ...options } = {}) => {
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>, options);
-};
+import ColumnConfigItem from './ColumnConfigItem';
+import {
+  ColumnConfigInfo,
+  ColumnConfig,
+  ColumnConfigFormLayout,
+} from './types';
+import { DEFAULT_CONFIG_FORM_LAYOUT } from './constants';
+import { COLUMN_NAME_ALIASES } from '../../../constants';
 
-describe('ControlForm', () => {
-  const onChangeMock = jest.fn();
-
-  const defaultProps = {
-    onChange: onChangeMock,
-    value: { field1: 'value1' },
-    children: (
-      <ControlFormRow>
-        <div name="field1" />
-      </ControlFormRow>
-    ),
+export type ColumnConfigControlProps<T extends ColumnConfig> =
+  ControlComponentProps<Record<string, T>> & {
+    queryResponse?: ChartDataResponseResult;
+    configFormLayout?: ColumnConfigFormLayout;
+    appliedColumnNames?: string[];
+    emitFilter: boolean;
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+/**
+ * Max number of columns to show by default.
+ */
+const MAX_NUM_COLS = 10;
 
-  test('renders correctly', () => {
-    const { container } = renderWithTheme(<ControlForm {...defaultProps} />);
-    expect(container).toMatchSnapshot();
-  });
-
-  test('calls onChange with the correct value', () => {
-    const { getByText } = renderWithTheme(
-      <ControlForm
-        {...defaultProps}
-        children={
-          <ControlFormRow>
-            <div
-              name="field1"
-              onChange={jest.fn()}
-              value="initialValue"
-            >
-              <span>Field 1</span>
-            </div>
-          </ControlFormRow>
-        }
-      />
-    );
-
-    const field1 = getByText('Field 1');
-    fireEvent.change(field1, { target: { value: 'newValue' } });
-
-    expect(onChangeMock).toHaveBeenCalledWith({ field1: 'newValue' });
-  });
-
-  test('handles multiple fields and debounced onChange', () => {
-    jest.useFakeTimers();
-    const { getByText } = renderWithTheme(
-      <ControlForm
-        {...defaultProps}
-        children={
-          <ControlFormRow>
-            <div
-              name="field1"
-              onChange={jest.fn()}
-              value="initialValue1"
-            >
-              <span>Field 1</span>
-            </div>
-            <div
-              name="field2"
-              onChange={jest.fn()}
-              value="initialValue2"
-              debounceDelay={200}
-            >
-              <span>Field 2</span>
-            </div>
-          </ControlFormRow>
-        }
-      />
-    );
-
-    const field1 = getByText('Field 1');
-    const field2 = getByText('Field 2');
-
-    fireEvent.change(field1, { target: { value: 'newValue1' } });
-    expect(onChangeMock).toHaveBeenCalledWith({ field1: 'newValue1' });
-
-    fireEvent.change(field2, { target: { value: 'newValue2' } });
-    jest.advanceTimersByTime(200);
-    expect(onChangeMock).toHaveBeenCalledWith({
-      field1: 'newValue1',
-      field2: 'newValue2',
+/**
+ * Add per-column config to queried results.
+ */
+export default function ColumnConfigControl<T extends ColumnConfig>({
+  queryResponse,
+  appliedColumnNames = [],
+  value,
+  onChange,
+  configFormLayout = DEFAULT_CONFIG_FORM_LAYOUT,
+  emitFilter,
+  ...props
+}: ColumnConfigControlProps<T>) {
+  if (emitFilter) {
+    Object.values(configFormLayout).forEach(array_of_array => {
+      if (!array_of_array.some(arr => arr.includes('emitTarget'))) {
+        array_of_array.push(['emitTarget']);
+      }
     });
+  } else {
+    Object.values(configFormLayout).forEach(array_of_array => {
+      const index = array_of_array.findIndex(arr => arr.includes('emitTarget'));
+      if (index > -1) {
+        array_of_array.splice(index, 1);
+      }
+    });
+  }
 
-    jest.useRealTimers();
-  });
-});
+  const { colnames: _colnames, coltypes: _coltypes } = queryResponse || {};
+  let colnames: string[] = [];
+  let coltypes: GenericDataType[] = [];
+  if (appliedColumnNames.length === 0) {
+    colnames = _colnames || [];
+    coltypes = _coltypes || [];
+  } else {
+    const appliedCol = new Set(appliedColumnNames);
+    _colnames?.forEach((col, idx) => {
+      if (appliedCol.has(col)) {
+        colnames.push(col);
+        coltypes.push(_coltypes?.[idx] as GenericDataType);
+      }
+    });
+  }
+  const theme = useTheme();
+  const columnConfigs = useMemo(() => {
+    const configs: Record<string, ColumnConfigInfo> = {};
+    colnames?.forEach((col, idx) => {
+      configs[col] = {
+        name: COLUMN_NAME_ALIASES[col] || col,
+        type: coltypes?.[idx],
+        config: value?.[col] || {},
+      };
+    });
+    return configs;
+  }, [value, colnames, coltypes]);
+  const [showAllColumns, setShowAllColumns] = useState(false);
 
-describe('ControlFormRow', () => {
-  test('renders correctly', () => {
-    const { container } = renderWithTheme(
-      <ControlFormRow>
-        <div>Child 1</div>
-        <div>Child 2</div>
-      </ControlFormRow>
-    );
-    expect(container).toMatchSnapshot();
-  });
+  const getColumnInfo = (col: string) => columnConfigs[col] || {};
+  const setColumnConfig = (col: string, config: T) => {
+    if (onChange) {
+      // Only keep configs for known columns
+      const validConfigs: Record<string, T> =
+        colnames && value
+          ? Object.fromEntries(
+              Object.entries(value).filter(([key]) => colnames.includes(key)),
+            )
+          : { ...value };
+      onChange({
+        ...validConfigs,
+        [col]: config,
+      });
+    }
+  };
 
-  test('renders children', () => {
-    const { getByText } = renderWithTheme(
-      <ControlFormRow>
-        <div>Child 1</div>
-        <div>Child 2</div>
-      </ControlFormRow>
-    );
+  if (!colnames || colnames.length === 0) return null;
 
-    expect(getByText('Child 1')).toBeInTheDocument();
-    expect(getByText('Child 2')).toBeInTheDocument();
-  });
-});
+  const needShowMoreButton = colnames.length > MAX_NUM_COLS + 2;
+  const cols =
+    needShowMoreButton && !showAllColumns
+      ? colnames.slice(0, MAX_NUM_COLS)
+      : colnames;
+
+  return (
+    <>
+      <ControlHeader {...props} />
+      <div
+        css={{
+          border: `1px solid ${theme.colors.grayscale.light2}`,
+          borderRadius: theme.gridUnit,
+        }}
+      >
+        {cols.map(col => (
+          <ColumnConfigItem
+            key={col}
+            column={getColumnInfo(col)}
+            onChange={config => setColumnConfig(col, config as T)}
+            configFormLayout={configFormLayout}
+            cols={cols}
+          />
+        ))}
+        {needShowMoreButton && (
+          <div
+            role="button"
+            tabIndex={-1}
+            css={{
+              padding: theme.gridUnit * 2,
+              textAlign: 'center',
+              cursor: 'pointer',
+              textTransform: 'uppercase',
+              fontSize: theme.typography.sizes.xs,
+              color: theme.colors.text.label,
+              ':hover': {
+                backgroundColor: theme.colors.grayscale.light4,
+              },
+            }}
+            onClick={() => setShowAllColumns(!showAllColumns)}
+          >
+            {showAllColumns ? (
+              <>
+                <i className="fa fa-angle-up" /> &nbsp; {t('Show less columns')}
+              </>
+            ) : (
+              <>
+                <i className="fa fa-angle-down" /> &nbsp;
+                {t('Show all columns')}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
