@@ -1,117 +1,81 @@
-import findNonTabChildChartIdsWithCache from './findNonTabChildChartIdsWithCache';
-import { TABS_TYPE, CHART_TYPE } from '../componentTypes';
+// childChartsDidLoad.test.js
+import childChartsDidLoad from './childChartsDidLoad';
+import findNonTabChildCharIds from './findNonTabChildChartIds';
 
-jest.mock('../componentTypes', () => ({
-  TABS_TYPE: 'tabs',
-  CHART_TYPE: 'chart',
-}));
+// Mock the findNonTabChildCharIds function
+jest.mock('./findNonTabChildChartIds');
 
-describe('findNonTabChildChartIdsWithCache', () => {
+describe('childChartsDidLoad', () => {
   beforeEach(() => {
-    // Clear cache before each test
-    jest.resetModules();
+    // Reset the mock implementation before each test
+    findNonTabChildCharIds.mockReset();
   });
 
-  test('should return chart IDs not nested within Tabs components', () => {
-    const layout = {
-      root: {
-        type: TABS_TYPE,
-        id: 'root',
-        children: ['tabs1', 'chart1'],
-      },
-      tabs1: {
-        type: TABS_TYPE,
-        id: 'tabs1',
-        children: ['chart2'],
-      },
-      chart1: {
-        type: CHART_TYPE,
-        id: 'chart1',
-        meta: { chartId: 'chart1-id' },
-        children: [],
-      },
-      chart2: {
-        type: CHART_TYPE,
-        id: 'chart2',
-        meta: { chartId: 'chart2-id' },
-        children: [],
-      },
+  it('should return didLoad true and correct minQueryStartTime when all charts have completed loading', () => {
+    // Arrange
+    findNonTabChildCharIds.mockReturnValue(['chart1', 'chart2']);
+    const chartQueries = {
+      chart1: { chartUpdateStartTime: 10, chartStatus: 'rendered' },
+      chart2: { chartUpdateStartTime: 20, chartStatus: 'stopped' },
     };
+    const layout = {};
+    const id = 'some-id';
 
-    const result = findNonTabChildChartIdsWithCache({ id: 'root', layout });
-    expect(result).toEqual(['chart1-id']);
+    // Act
+    const result = childChartsDidLoad({ chartQueries, layout, id });
+
+    // Assert
+    expect(result.didLoad).toBe(true);
+    expect(result.minQueryStartTime).toBe(10);
   });
 
-  test('should cache results for identical layouts', () => {
-    const layout = {
-      root: {
-        type: TABS_TYPE,
-        id: 'root',
-        children: ['tabs1', 'chart1'],
-      },
-      tabs1: {
-        type: TABS_TYPE,
-        id: 'tabs1',
-        children: ['chart2'],
-      },
-      chart1: {
-        type: CHART_TYPE,
-        id: 'chart1',
-        meta: { chartId: 'chart1-id' },
-        children: [],
-      },
-      chart2: {
-        type: CHART_TYPE,
-        id: 'chart2',
-        meta: { chartId: 'chart2-id' },
-        children: [],
-      },
+  it('should return didLoad false when not all charts have completed loading', () => {
+    // Arrange
+    findNonTabChildCharIds.mockReturnValue(['chart1', 'chart2']);
+    const chartQueries = {
+      chart1: { chartUpdateStartTime: 10, chartStatus: 'rendered' },
+      chart2: { chartUpdateStartTime: 20, chartStatus: 'loading' },
     };
+    const layout = {};
+    const id = 'some-id';
 
-    const result1 = findNonTabChildChartIdsWithCache({ id: 'root', layout });
-    const result2 = findNonTabChildChartIdsWithCache({ id: 'root', layout });
+    // Act
+    const result = childChartsDidLoad({ chartQueries, layout, id });
 
-    expect(result1).toBe(result2); // Should be the same cached result
+    // Assert
+    expect(result.didLoad).toBe(false);
+    expect(result.minQueryStartTime).toBe(10); // Only chart1's start time should be considered
   });
 
-  test('should handle layouts with no charts', () => {
-    const layout = {
-      root: {
-        type: TABS_TYPE,
-        id: 'root',
-        children: ['tabs1'],
-      },
-      tabs1: {
-        type: TABS_TYPE,
-        id: 'tabs1',
-        children: [],
-      },
-    };
+  it('should handle edge cases correctly', () => {
+    // Arrange
+    findNonTabChildCharIds.mockReturnValue([]);
+    const chartQueries = {};
+    const layout = {};
+    const id = 'some-id';
 
-    const result = findNonTabChildChartIdsWithCache({ id: 'root', layout });
-    expect(result).toEqual([]);
+    // Act
+    const result = childChartsDidLoad({ chartQueries, layout, id });
+
+    // Assert
+    expect(result.didLoad).toBe(true); // No charts to load, so should be considered as loaded
+    expect(result.minQueryStartTime).toBe(Infinity); // No start times
   });
 
-  test('should handle layouts with no valid charts', () => {
-    const layout = {
-      root: {
-        type: 'unknown_type',
-        id: 'root',
-        children: ['tabs1'],
-      },
-      tabs1: {
-        type: 'unknown_type',
-        id: 'tabs1',
-        children: ['chart1'],
-      },
-      chart1: {
-        type: 'chart',
-        id: 'chart1',
-        children: [],
-      },
+  it('should handle scenarios with invalid chart statuses', () => {
+    // Arrange
+    findNonTabChildCharIds.mockReturnValue(['chart1']);
+    const chartQueries = {
+      chart1: { chartUpdateStartTime: 10, chartStatus: 'unknown' },
     };
+    const layout = {};
+    const id = 'some-id';
 
-    const result = findNonTabChildChartIdsWithCache({ id: 'root', layout });
-    expect(result).toEqual([]);
+    // Act
+    const result = childChartsDidLoad({ chartQueries, layout, id });
+
+    // Assert
+    expect(result.didLoad).toBe(false);
+    expect(result.minQueryStartTime).toBe(10);
   });
 });
