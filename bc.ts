@@ -1,109 +1,117 @@
-import findTopLevelComponentIdsWithCache from './findTopLevelComponentIdsWithCache';
-import { DASHBOARD_ROOT_ID } from '../constants';
-import findNonTabChildChartIds from './findNonTabChildChartIds';
+import findNonTabChildChartIdsWithCache from './findNonTabChildChartIdsWithCache';
+import { TABS_TYPE, CHART_TYPE } from '../componentTypes';
 
-jest.mock('./findNonTabChildChartIds');
+jest.mock('../componentTypes', () => ({
+  TABS_TYPE: 'tabs',
+  CHART_TYPE: 'chart',
+}));
 
-describe('findTopLevelComponentIdsWithCache', () => {
+describe('findNonTabChildChartIdsWithCache', () => {
   beforeEach(() => {
     // Clear cache before each test
     jest.resetModules();
   });
 
-  test('should return top-level component IDs from layout', () => {
+  test('should return chart IDs not nested within Tabs components', () => {
     const layout = {
-      [DASHBOARD_ROOT_ID]: {
-        type: DASHBOARD_GRID_TYPE,
+      root: {
+        type: TABS_TYPE,
         id: 'root',
-        children: ['grid1', 'tab1'],
+        children: ['tabs1', 'chart1'],
       },
-      grid1: {
-        type: DASHBOARD_GRID_TYPE,
-        id: 'grid1',
+      tabs1: {
+        type: TABS_TYPE,
+        id: 'tabs1',
+        children: ['chart2'],
+      },
+      chart1: {
+        type: CHART_TYPE,
+        id: 'chart1',
+        meta: { chartId: 'chart1-id' },
         children: [],
       },
-      tab1: {
-        type: TAB_TYPE,
-        id: 'tab1',
-        children: ['chart1', 'chart2'],
+      chart2: {
+        type: CHART_TYPE,
+        id: 'chart2',
+        meta: { chartId: 'chart2-id' },
+        children: [],
       },
-      chart1: { type: 'chart', id: 'chart1', children: [] },
-      chart2: { type: 'chart', id: 'chart2', children: [] },
     };
 
-    // Mock findNonTabChildChartIds
-    findNonTabChildChartIds.mockReturnValue(['chart1', 'chart2']);
-
-    const result = findTopLevelComponentIdsWithCache(layout);
-    expect(result).toEqual([
-      {
-        id: 'root',
-        type: DASHBOARD_GRID_TYPE,
-        parent_type: null,
-        parent_id: null,
-        index: null,
-        depth: 0,
-        slice_ids: [], // No charts under 'root'
-      },
-      {
-        id: 'tab1',
-        type: TAB_TYPE,
-        parent_type: DASHBOARD_GRID_TYPE,
-        parent_id: 'root',
-        index: 1,
-        depth: 1,
-        slice_ids: ['chart1', 'chart2'],
-      },
-    ]);
+    const result = findNonTabChildChartIdsWithCache({ id: 'root', layout });
+    expect(result).toEqual(['chart1-id']);
   });
 
   test('should cache results for identical layouts', () => {
     const layout = {
-      [DASHBOARD_ROOT_ID]: {
-        type: DASHBOARD_GRID_TYPE,
+      root: {
+        type: TABS_TYPE,
         id: 'root',
-        children: ['grid1', 'tab1'],
+        children: ['tabs1', 'chart1'],
       },
-      grid1: {
-        type: DASHBOARD_GRID_TYPE,
-        id: 'grid1',
+      tabs1: {
+        type: TABS_TYPE,
+        id: 'tabs1',
+        children: ['chart2'],
+      },
+      chart1: {
+        type: CHART_TYPE,
+        id: 'chart1',
+        meta: { chartId: 'chart1-id' },
         children: [],
       },
-      tab1: {
-        type: TAB_TYPE,
-        id: 'tab1',
-        children: ['chart1', 'chart2'],
+      chart2: {
+        type: CHART_TYPE,
+        id: 'chart2',
+        meta: { chartId: 'chart2-id' },
+        children: [],
       },
-      chart1: { type: 'chart', id: 'chart1', children: [] },
-      chart2: { type: 'chart', id: 'chart2', children: [] },
     };
 
-    // Mock findNonTabChildChartIds
-    findNonTabChildChartIds.mockReturnValue(['chart1', 'chart2']);
-
-    const result1 = findTopLevelComponentIdsWithCache(layout);
-    const result2 = findTopLevelComponentIdsWithCache(layout);
+    const result1 = findNonTabChildChartIdsWithCache({ id: 'root', layout });
+    const result2 = findNonTabChildChartIdsWithCache({ id: 'root', layout });
 
     expect(result1).toBe(result2); // Should be the same cached result
   });
 
-  test('should return empty array for empty layout', () => {
-    const layout = {};
-    const result = findTopLevelComponentIdsWithCache(layout);
+  test('should handle layouts with no charts', () => {
+    const layout = {
+      root: {
+        type: TABS_TYPE,
+        id: 'root',
+        children: ['tabs1'],
+      },
+      tabs1: {
+        type: TABS_TYPE,
+        id: 'tabs1',
+        children: [],
+      },
+    };
+
+    const result = findNonTabChildChartIdsWithCache({ id: 'root', layout });
     expect(result).toEqual([]);
   });
 
-  test('should return correct result for layout without top-level components', () => {
+  test('should handle layouts with no valid charts', () => {
     const layout = {
-      [DASHBOARD_ROOT_ID]: {
+      root: {
         type: 'unknown_type',
         id: 'root',
+        children: ['tabs1'],
+      },
+      tabs1: {
+        type: 'unknown_type',
+        id: 'tabs1',
         children: ['chart1'],
       },
-      chart1: { type: 'chart', id: 'chart1', children: [] },
+      chart1: {
+        type: 'chart',
+        id: 'chart1',
+        children: [],
+      },
     };
 
-    const result = findTopLevelComponentIdsWithCache(layout);
+    const result = findNonTabChildChartIdsWithCache({ id: 'root', layout });
     expect(result).toEqual([]);
   });
 });
