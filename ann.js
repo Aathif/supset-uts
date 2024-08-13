@@ -1,99 +1,137 @@
-// PivotData.test.js
-import { PivotData } from './path/to/your/PivotData';
-import PropTypes from 'prop-types';
-import { getSort, naturalSort, flatKey } from './utils';
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import { TableRenderer } from './TableRenderer';
+import { PivotData } from './utilities';
 
-jest.mock('prop-types', () => ({
-  checkPropTypes: jest.fn(),
+// Mock the t function for translations
+jest.mock('@superset-ui/core', () => ({
+  t: (str) => str,
 }));
 
-jest.mock('./utils', () => ({
-  getSort: jest.fn(),
-  naturalSort: jest.fn(),
-  flatKey: jest.fn(),
-}));
-
-describe('PivotData', () => {
-  const defaultProps = {
-    data: [
-      { row: 'A', col: 'X', value: 10 },
-      { row: 'B', col: 'Y', value: 20 },
-    ],
-    rows: ['row'],
-    cols: ['col'],
-    aggregatorName: 'Sum',
-    vals: ['value'],
-    aggregatorsFactory: jest.fn(() => ({
-      Sum: jest.fn(() => ({
-        push: jest.fn(),
-        value: jest.fn(),
-        format: jest.fn(),
-      })),
+// Mock PivotData
+jest.mock('./utilities', () => ({
+  PivotData: jest.fn().mockImplementation(() => ({
+    getRowKeys: jest.fn(() => []),
+    getColKeys: jest.fn(() => []),
+    getAggregator: jest.fn(() => ({
+      value: jest.fn(() => 42),
+      format: jest.fn((value) => `${value}`),
     })),
-    sorters: null,
-    rowOrder: 'key_a_to_z',
-    colOrder: 'key_a_to_z',
-    customFormatters: null,
+  })),
+  flatKey: jest.fn((key) => key.join('-')),
+}));
+
+describe('TableRenderer', () => {
+  const defaultProps = {
+    rows: ['row1', 'row2'],
+    cols: ['col1', 'col2'],
+    tableOptions: {},
+    subtotalOptions: {},
+    namesMapping: {},
+    aggregatorName: 'sum',
+    onContextMenu: jest.fn(),
   };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
+  it('renders without crashing', () => {
+    render(<TableRenderer {...defaultProps} />);
+    expect(screen.getByText('row1')).toBeInTheDocument();
   });
 
-  test('should initialize with default and input properties', () => {
-    const instance = new PivotData(defaultProps);
+  it('renders correct number of row and column headers', () => {
+    const rowKeys = [['A'], ['B']];
+    const colKeys = [['X'], ['Y']];
 
-    expect(instance.props).toEqual(expect.objectContaining(defaultProps));
-    expect(PropTypes.checkPropTypes).toHaveBeenCalled();
+    PivotData.mockImplementationOnce(() => ({
+      getRowKeys: jest.fn(() => rowKeys),
+      getColKeys: jest.fn(() => colKeys),
+      getAggregator: jest.fn(() => ({
+        value: jest.fn(() => 42),
+        format: jest.fn((value) => `${value}`),
+      })),
+    }));
+
+    render(<TableRenderer {...defaultProps} />);
+
+    expect(screen.getByText('A')).toBeInTheDocument();
+    expect(screen.getByText('B')).toBeInTheDocument();
+    expect(screen.getByText('X')).toBeInTheDocument();
+    expect(screen.getByText('Y')).toBeInTheDocument();
   });
 
-  test('should call processRecord for each record', () => {
-    const instance = new PivotData(defaultProps);
+  it('triggers clickHeaderHandler when a column header is clicked', () => {
+    const clickColumnHeaderCallback = jest.fn();
+    render(
+      <TableRenderer
+        {...defaultProps}
+        tableOptions={{ clickColumnHeaderCallback }}
+      />
+    );
 
-    const processRecordSpy = jest.spyOn(instance, 'processRecord');
-    instance.props.data.forEach(record => {
-      instance.processRecord(record);
-    });
-
-    expect(processRecordSpy).toHaveBeenCalledTimes(instance.props.data.length);
+    const colHeader = screen.getByText('col1');
+    fireEvent.click(colHeader);
+    expect(clickColumnHeaderCallback).toHaveBeenCalled();
   });
 
-  test('should sort row and column keys correctly', () => {
-    const instance = new PivotData(defaultProps);
+  it('toggles row and column expansion on click', () => {
+    const rowKeys = [['A'], ['B']];
+    const colKeys = [['X'], ['Y']];
 
-    const arrSortSpy = jest.spyOn(instance, 'arrSort');
-    instance.sortKeys();
+    PivotData.mockImplementationOnce(() => ({
+      getRowKeys: jest.fn(() => rowKeys),
+      getColKeys: jest.fn(() => colKeys),
+      getAggregator: jest.fn(() => ({
+        value: jest.fn(() => 42),
+        format: jest.fn((value) => `${value}`),
+      })),
+    }));
 
-    expect(arrSortSpy).toHaveBeenCalledTimes(2);
+    const { rerender } = render(<TableRenderer {...defaultProps} />);
+
+    const rowHeader = screen.getByText('A');
+    fireEvent.click(rowHeader);
+    expect(rowHeader).toHaveClass('pvtRowLabel');
+
+    rerender(<TableRenderer {...defaultProps} />);
+    const colHeader = screen.getByText('X');
+    fireEvent.click(colHeader);
+    expect(colHeader).toHaveClass('pvtColLabel');
   });
 
-  test('should return sorted row and column keys', () => {
-    const instance = new PivotData(defaultProps);
+  it('renders Subtotal when rows or columns have subtotals enabled', () => {
+    render(
+      <TableRenderer
+        {...defaultProps}
+        subtotalOptions={{ rowSubtotals: true, colSubtotals: true }}
+      />
+    );
 
-    const sortedRowKeys = instance.getRowKeys();
-    const sortedColKeys = instance.getColKeys();
-
-    expect(sortedRowKeys).toEqual(instance.rowKeys);
-    expect(sortedColKeys).toEqual(instance.colKeys);
+    expect(screen.getAllByText('Subtotal')).toHaveLength(2);
   });
 
-  test('should return the correct aggregator for given row and col keys', () => {
-    const instance = new PivotData(defaultProps);
+  it('handles table click callback correctly', () => {
+    const clickCallback = jest.fn();
+    const rowKeys = [['A'], ['B']];
+    const colKeys = [['X'], ['Y']];
 
-    const rowKey = ['A'];
-    const colKey = ['X'];
-    const aggregator = instance.getAggregator(rowKey, colKey);
+    PivotData.mockImplementationOnce(() => ({
+      getRowKeys: jest.fn(() => rowKeys),
+      getColKeys: jest.fn(() => colKeys),
+      getAggregator: jest.fn(() => ({
+        value: jest.fn(() => 42),
+        format: jest.fn((value) => `${value}`),
+      })),
+    }));
 
-    expect(aggregator).toBeDefined();
+    render(
+      <TableRenderer
+        {...defaultProps}
+        tableOptions={{ clickCallback }}
+      />
+    );
+
+    const cell = screen.getAllByRole('gridcell')[0];
+    fireEvent.click(cell);
+    expect(clickCallback).toHaveBeenCalledWith(expect.anything(), 42, expect.anything(), expect.anything());
   });
-
-  test('should handle missing row or col key in getAggregator', () => {
-    const instance = new PivotData(defaultProps);
-
-    const aggregator = instance.getAggregator([], []);
-    expect(aggregator.value()).toBeNull();
-    expect(aggregator.format()).toBe('');
-  });
-
-  // Additional tests can be added to cover edge cases, formatted aggregators, and subtotal logic.
 });
