@@ -1,124 +1,87 @@
-import { transformProps } from './transformProps'; // Adjust path as necessary
-import { TableChartProps, TableChartTransformedProps } from './types'; // Adjust path as necessary
+import handleResourceExport from './handleResourceExport'; // Adjust path as necessary
+import parseCookie from 'src/utils/parseCookie';
+import rison from 'rison';
+import { nanoid } from 'nanoid';
 
-describe('transformProps', () => {
+// Mock dependencies
+jest.mock('src/utils/parseCookie');
+jest.mock('rison');
+jest.mock('nanoid', () => ({
+  nanoid: jest.fn(() => 'mocked-token'),
+}));
 
-  const baseChartProps: TableChartProps = {
-    height: 400,
-    width: 600,
-    rawFormData: {
-      align_pn: true,
-      color_pn: true,
-      show_cell_bars: true,
-      include_search: false,
-      page_length: 10,
-      server_pagination: false,
-      export_all_data: false,
-      server_page_length: 10,
-      order_desc: false,
-      query_mode: 'aggregate',
-      show_totals: false,
-      cellBgColor: 'white',
-      columnNameAliasing: {},
-      conditional_formatting: [],
-      allow_rearrange_columns: false,
-      slice_id: '123',
-    },
-    queriesData: [],
-    filterState: { filters: {} },
-    ownState: {},
-    hooks: { onAddFilter: jest.fn(), setDataMask: jest.fn(), onContextMenu: jest.fn() },
-    emitCrossFilters: false,
-  };
-
-  it('should transform props correctly when server pagination is false', () => {
-    const chartProps: TableChartProps = {
-      ...baseChartProps,
-      queriesData: [{ data: [{ col1: 'value1' }], rowcount: 100 }],
-    };
-
-    const transformedProps = transformProps(chartProps);
-
-    expect(transformedProps.height).toBe(400);
-    expect(transformedProps.width).toBe(600);
-    expect(transformedProps.data).toEqual([{ col1: 'value1' }]);
-    expect(transformedProps.rowCount).toBe(100);
-    expect(transformedProps.pageSize).toBe(10); // Assuming getPageSize returns 10
-    expect(transformedProps.filters).toEqual({});
-    expect(transformedProps.emitCrossFilters).toBe(false);
-    expect(transformedProps.sliceId).toBe('123');
+describe('handleResourceExport', () => {
+  beforeEach(() => {
+    // Clear mocks before each test
+    jest.clearAllMocks();
+    // Reset any changes to document.body or other global objects
+    document.body.innerHTML = '';
   });
 
-  it('should handle server pagination correctly', () => {
-    const chartProps: TableChartProps = {
-      ...baseChartProps,
-      rawFormData: {
-        ...baseChartProps.rawFormData,
-        server_pagination: true,
-        server_page_length: 20,
-      },
-      queriesData: [
-        { data: [{ col1: 'value1' }], rowcount: 100 },
-        { data: [{ rowcount: 50 }] },
-        { data: [{ rowcount: 150 }] },
-      ],
-    };
+  it('should create an iframe and append it to the document body', () => {
+    const resource = 'some-resource';
+    const ids = [1, 2, 3];
+    const done = jest.fn();
 
-    const transformedProps = transformProps(chartProps);
+    handleResourceExport(resource, ids, done);
 
-    expect(transformedProps.rowCount).toBe(50); // Should use countQuery rowcount
-    expect(transformedProps.pageSize).toBe(20); // Should use serverPageLength
+    const iframe = document.querySelector('iframe');
+    expect(iframe).not.toBeNull();
+    expect(iframe?.src).toBe(`/api/v1/${resource}/export/?q=${rison.encode(ids)}&token=mocked-token`);
+    expect(iframe?.style.display).toBe('none');
+    expect(document.body.contains(iframe!)).toBe(true);
   });
 
-  it('should handle query mode and totals correctly', () => {
-    const chartProps: TableChartProps = {
-      ...baseChartProps,
-      rawFormData: {
-        ...baseChartProps.rawFormData,
-        query_mode: 'aggregate',
-        show_totals: true,
-      },
-      queriesData: [
-        { data: [{ col1: 'value1' }], rowcount: 100 },
-        { data: [{ total: 200 }] },
-      ],
-    };
+  it('should call the done callback when cookie indicates export is done', () => {
+    const resource = 'some-resource';
+    const ids = [1, 2, 3];
+    const done = jest.fn();
+    const cookieMock = { 'mocked-token': 'done' };
 
-    const transformedProps = transformProps(chartProps);
+    (parseCookie as jest.Mock).mockReturnValue(cookieMock);
+    jest.useFakeTimers();
 
-    expect(transformedProps.totals).toEqual({ total: 200 });
+    handleResourceExport(resource, ids, done);
+
+    // Fast-forward the timers
+    jest.advanceTimersByTime(200);
+
+    expect(done).toHaveBeenCalled();
   });
 
-  it('should apply column color formatters', () => {
-    const chartProps: TableChartProps = {
-      ...baseChartProps,
-      rawFormData: {
-        ...baseChartProps.rawFormData,
-        conditional_formatting: [
-          { column: 'col1', formatter: (value: any) => value === 'value1' ? 'red' : 'blue' },
-        ],
-      },
-      queriesData: [{ data: [{ col1: 'value1' }] }],
-    };
+  it('should remove the iframe and clear the interval when export is done', () => {
+    const resource = 'some-resource';
+    const ids = [1, 2, 3];
+    const done = jest.fn();
+    const cookieMock = { 'mocked-token': 'done' };
 
-    const transformedProps = transformProps(chartProps);
+    (parseCookie as jest.Mock).mockReturnValue(cookieMock);
+    jest.useFakeTimers();
 
-    expect(transformedProps.columnColorFormatters).toBeDefined();
+    handleResourceExport(resource, ids, done);
+
+    // Fast-forward the timers
+    jest.advanceTimersByTime(200);
+
+    const iframe = document.querySelector('iframe');
+    expect(iframe).toBeNull();
+    expect(clearInterval).toHaveBeenCalled();
   });
 
-  it('should handle default values correctly', () => {
-    const chartProps: TableChartProps = {
-      ...baseChartProps,
-      rawFormData: {}, // Empty rawFormData
-      queriesData: [{ data: [{ col1: 'value1' }], rowcount: 100 }],
-    };
+  it('should handle the case when cookie does not indicate export is done', () => {
+    const resource = 'some-resource';
+    const ids = [1, 2, 3];
+    const done = jest.fn();
+    const cookieMock = { 'mocked-token': 'not-done' };
 
-    const transformedProps = transformProps(chartProps);
+    (parseCookie as jest.Mock).mockReturnValue(cookieMock);
+    jest.useFakeTimers();
 
-    expect(transformedProps.alignPositiveNegative).toBe(true); // Default value
-    expect(transformedProps.colorPositiveNegative).toBe(true); // Default value
-    expect(transformedProps.showCellBars).toBe(true); // Default value
-    expect(transformedProps.pageSize).toBe(10); // Default page length
+    handleResourceExport(resource, ids, done);
+
+    // Advance time but should not trigger done callback
+    jest.advanceTimersByTime(200);
+
+    expect(done).not.toHaveBeenCalled();
   });
-
 });
