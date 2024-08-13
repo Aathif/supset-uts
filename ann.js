@@ -1,31 +1,55 @@
-import moment from 'moment';
+// Importing the necessary modules
+const naturalSort = require('natural-sort'); // Assuming naturalSort is a separate function
+const sortAs = require('./path/to/your/module'); // Replace with the correct path
 
-describe('parseMetricValue', () => {
-  test('returns timestamp for valid ISO 8601 date string', () => {
-    const dateString = '2023-08-06T12:00:00Z';
-    const expectedTimestamp = moment.utc(dateString).valueOf();
-    expect(parseMetricValue(dateString)).toBe(expectedTimestamp);
+// Unit test for the sortAs function
+describe('sortAs', () => {
+  it('should sort according to the provided order', () => {
+    const order = ['apple', 'banana', 'cherry'];
+    const sorter = sortAs(order);
+    
+    const array = ['cherry', 'banana', 'apple'];
+    const sortedArray = array.sort(sorter);
+    
+    expect(sortedArray).toEqual(['apple', 'banana', 'cherry']);
   });
 
-  test('returns 0 for invalid date string', () => {
-    const invalidDateString = 'invalid-date';
-    expect(parseMetricValue(invalidDateString)).toBe(0);
+  it('should sort case-insensitively when not in the original order', () => {
+    const order = ['Apple', 'banana', 'Cherry'];
+    const sorter = sortAs(order);
+    
+    const array = ['cherry', 'Banana', 'apple'];
+    const sortedArray = array.sort(sorter);
+    
+    expect(sortedArray).toEqual(['apple', 'Banana', 'cherry']);
   });
 
-  test('returns the same number when metricValue is a number', () => {
-    const numberValue = 42;
-    expect(parseMetricValue(numberValue)).toBe(numberValue);
+  it('should place items not in the order at the end, sorted naturally', () => {
+    const order = ['apple', 'banana'];
+    const sorter = sortAs(order);
+    
+    const array = ['cherry', 'banana', 'apple', 'date'];
+    const sortedArray = array.sort(sorter);
+    
+    expect(sortedArray).toEqual(['apple', 'banana', 'cherry', 'date']);
   });
 
-  test('returns 0 when metricValue is null', () => {
-    expect(parseMetricValue(null)).toBe(0);
+  it('should handle when no elements are in the order and fallback to natural sort', () => {
+    const order = [];
+    const sorter = sortAs(order);
+    
+    const array = ['cherry', 'banana', 'apple'];
+    const sortedArray = array.sort(sorter);
+    
+    expect(sortedArray).toEqual(['apple', 'banana', 'cherry']);
   });
 
-  test('returns 0 when metricValue is undefined', () => {
-    expect(parseMetricValue(undefined)).toBe(0);
-  });
-
-  test('returns 0 for empty string', () => {
-    expect(parseMetricValue('')).toBe(0);
+  it('should return 0 if both elements are the same and are not in the order', () => {
+    const order = ['apple', 'banana'];
+    const sorter = sortAs(order);
+    
+    const result = sorter('date', 'date');
+    
+    expect(result).toBe(0);
   });
 });
