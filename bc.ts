@@ -1,31 +1,42 @@
-describe('stringifyTimeRange', () => {
-  it('should return null if any item in the extent does not have toISOString method', () => {
-    const extent = [new Date(), { notADate: 'value' }];
-    const result = stringifyTimeRange(extent);
-    expect(result).toBeNull();
+import { setAxisShowMaxMin } from './setAxisShowMaxMin'; // Adjust path as necessary
+
+describe('setAxisShowMaxMin', () => {
+  it('should call axis.showMaxMin with showminmax when axis and showMaxMin are defined', () => {
+    const mockShowMaxMin = jest.fn();
+    const axis = { showMaxMin: mockShowMaxMin };
+    const showminmax = true;
+
+    setAxisShowMaxMin(axis, showminmax);
+
+    expect(mockShowMaxMin).toHaveBeenCalledWith(showminmax);
   });
 
-  it('should return a formatted string if all items in the extent have toISOString method', () => {
-    const extent = [new Date('2024-08-01T10:00:00Z'), new Date('2024-08-02T12:00:00Z')];
-    const result = stringifyTimeRange(extent);
-    expect(result).toBe('2024-08-01T10:00:00 : 2024-08-02T12:00:00');
+  it('should not call axis.showMaxMin when axis is undefined', () => {
+    const mockShowMaxMin = jest.fn();
+    const axis = undefined;
+    const showminmax = true;
+
+    setAxisShowMaxMin(axis, showminmax);
+
+    expect(mockShowMaxMin).not.toHaveBeenCalled();
   });
 
-  it('should handle an empty extent array', () => {
-    const extent: Date[] = [];
-    const result = stringifyTimeRange(extent);
-    expect(result).toBe('');
+  it('should not call axis.showMaxMin when axis.showMaxMin is undefined', () => {
+    const mockShowMaxMin = jest.fn();
+    const axis = {};
+    const showminmax = true;
+
+    setAxisShowMaxMin(axis, showminmax);
+
+    expect(mockShowMaxMin).not.toHaveBeenCalled();
   });
 
-  it('should handle a single item in the extent array', () => {
-    const extent = [new Date('2024-08-01T10:00:00Z')];
-    const result = stringifyTimeRange(extent);
-    expect(result).toBe('2024-08-01T10:00:00');
-  });
+  it('should not call axis.showMaxMin when showminmax is undefined', () => {
+    const mockShowMaxMin = jest.fn();
+    const axis = { showMaxMin: mockShowMaxMin };
 
-  it('should handle invalid date objects', () => {
-    const extent = [new Date('invalid-date'), new Date('2024-08-02T12:00:00Z')];
-    const result = stringifyTimeRange(extent);
-    expect(result).toBe('Invalid Date : 2024-08-02T12:00:00');
+    setAxisShowMaxMin(axis, undefined);
+
+    expect(mockShowMaxMin).not.toHaveBeenCalled();
   });
 });
