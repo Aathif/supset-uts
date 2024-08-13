@@ -1,266 +1,102 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import Popover from 'src/components/Popover';
-import { t, QueryMode } from '@superset-ui/core';
-import { FormattingPopoverContent } from './FormattingPopoverContent';
-import { ConditionalFormattingConfigTenant, FormattingPopoverTenantProps } from './types';
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import { FormattingPopover } from './FormattingPopover';
 import { getChartDataRequest } from 'src/components/Chart/chartAction';
 
-export const FormattingPopover = ({
-  title,
-  columns,
-  datasource,
-  onChange,
-  config,
-  children,
-  formData,
-  controls,
-  groupByOptions,
-  ...props
-}: FormattingPopoverTenantProps) => {
-  const [visible, setVisible] = useState(false);
-  const [configResp, setConfigResp] = useState({});
-  const [tenant, setTenant] = useState(0);
-  const [queryMode, setQueryMode] = useState('aggregate');
-  const [groupby, setGroupby] = useState([]);
-  const [metrics, setMetrics] = useState([]);
-  const [allColumns, setAllColumns] = useState([]);
-  const [adhocFilters, setAdhocFilters] = useState([]);
-  const [percentMetrics, setPercentMetrics] = useState([]);
-  const [orderByCols, setOrderByCols] = useState([]);
-  const [orderDesc, setOrderDesc] = useState(true);
-  const [limitMetric, setLimitMetric] = useState('');
+// Mock the getChartDataRequest function
+jest.mock('src/components/Chart/chartAction', () => ({
+  getChartDataRequest: jest.fn(),
+}));
 
-  useEffect(() => {
-    (async () => {
-      if (visible===true && config && Object.keys(config).length > 0) {
-        let tempFormData = {...formData};
-        if ('tenantId' in config){
-          tempFormData['tenant_id'] = config['tenantId'];
-        }
-        if ('queryMode' in config) {
-          tempFormData['query_mode'] = config['queryMode'];
-          setQueryMode(tempFormData['query_mode']);
-          if (config['queryMode'] === 'raw') {
-            tempFormData['all_columns'] = config['allColumns'] || [];
-            tempFormData['order_by_cols'] = config['orderbyCols'] || [];
-            setAllColumns(tempFormData['all_columns']);
-            setOrderByCols(tempFormData['order_by_cols']);
-          } else {
-            tempFormData['groupby'] = config['groupby'] || [];
-            tempFormData['metrics'] = config['metrics'] || [];
-            tempFormData['percent_metrics'] = config['percentMetrics'] || [];
-            tempFormData['order_desc'] = config['orderDesc'];
-            tempFormData['timeseries_limit_metric'] = config['limitMetric'] || '';
-            setGroupby(tempFormData['groupby']);
-            setMetrics(tempFormData['metrics']);
-            setPercentMetrics(tempFormData['percent_metrics']);
-            setOrderDesc(tempFormData['order_desc']);
-            setLimitMetric(tempFormData['timeseries_limit_metric']);
-          }
-          tempFormData['adhoc_filters'] = config['adhocFilters'] || [];
-          setAdhocFilters(tempFormData['adhoc_filters']);
-        }
-        makeRequest(tempFormData);
-      }
-    })();
-  }, [visible, config !== undefined]);
+// Mock children component
+const MockChildren = () => <div>Mock Child</div>;
 
-  const setQueryData = (mode: any) => {
-    setQueryMode(mode);
-  }
+describe('FormattingPopover', () => {
+  const defaultProps = {
+    title: 'Test Title',
+    columns: [],
+    datasource: {},
+    onChange: jest.fn(),
+    config: {},
+    formData: {},
+    controls: {},
+    groupByOptions: [],
+    children: <MockChildren />,
+  };
 
-  const onTenantChange = (tenantId: any) => {
-    setTenant(tenantId)
-  }
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
-  const onColumnChange = (columns: any, type: any, req: any=true) => {
-    let tempFormData = {...formData};
-    let configData = {...config} as any;
-    if (config === undefined && tenant) {
-      tempFormData['tenant_id'] = tenant;
-    } else {
-      tempFormData['tenant_id'] = configData['tenantId'];
-    }
-    if (type === 'query_mode') {
-      tempFormData['query_mode'] = columns;
-      setQueryMode(columns);
-      if (tempFormData['query_mode'] === 'raw') {
-        tempFormData['all_columns'] = allColumns || [];
-        tempFormData['order_by_cols'] = orderByCols || [];
-        if (tempFormData['all_columns'].length === 0) {
-          return false;
-        }
-      } else {
-        tempFormData['groupby'] = groupby || [];
-        if (tempFormData['groupby'].length === 0) {
-          return false;
-        }
-        tempFormData['metrics'] = metrics || [];
-        tempFormData['percent_metrics'] = percentMetrics || [];
-        tempFormData['order_desc'] = orderDesc;
-        tempFormData['timeseries_limit_metric'] = limitMetric;
-      }
-      tempFormData['adhoc_filters'] = adhocFilters || [];
-    } else {
-      tempFormData['query_mode'] = queryMode;
-      if (type === 'groupby') {
-        tempFormData['groupby'] = columns;
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = percentMetrics;
-        tempFormData['timeseries_limit_metric'] = limitMetric;
-        tempFormData['order_desc'] = orderDesc;
-        setGroupby(columns);
-      } else if (type === 'all_columns') {
-        tempFormData['all_columns'] = columns;
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = percentMetrics;
-        tempFormData['order_by_cols'] = orderByCols;
-        setAllColumns(columns);
-      } else if (type === 'metrics') {
-        if (queryMode === 'raw') {
-          tempFormData['all_columns'] = allColumns || [];
-          tempFormData['order_by_cols'] = orderByCols;
-        } else {
-          tempFormData['groupby'] = groupby || [];
-          tempFormData['timeseries_limit_metric'] = limitMetric;
-          tempFormData['order_desc'] = orderDesc;
-        }
-        tempFormData['order_by_cols'] = orderByCols;
-        tempFormData['metrics'] = columns;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = percentMetrics;
-        setMetrics(columns);
-      } else if (type === 'adhoc_filters') {
-        if (queryMode === 'raw') {
-          tempFormData['all_columns'] = allColumns || [];
-          tempFormData['order_by_cols'] = orderByCols;
-        } else {
-          tempFormData['groupby'] = groupby || [];
-          tempFormData['timeseries_limit_metric'] = limitMetric;
-          tempFormData['order_desc'] = orderDesc;
-        }
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = columns;
-        tempFormData['percent_metrics'] = percentMetrics;
-        setAdhocFilters(columns);
-      } else if (type === 'percent_metrics') {
-        if (queryMode === 'raw') {
-          tempFormData['all_columns'] = allColumns || [];
-          tempFormData['order_by_cols'] = orderByCols;
-        } else {
-          tempFormData['groupby'] = groupby || [];
-          tempFormData['timeseries_limit_metric'] = limitMetric;
-          tempFormData['order_desc'] = orderDesc;
-        }
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = columns;
-        setPercentMetrics(columns);
-      } else if (type === 'order_by_cols') {
-        if (queryMode === 'raw') {
-          tempFormData['all_columns'] = allColumns || [];
-          tempFormData['order_by_cols'] = columns;
-        } else {
-          tempFormData['groupby'] = groupby || [];
-          tempFormData['timeseries_limit_metric'] = limitMetric;
-          tempFormData['order_desc'] = orderDesc;
-        }
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = percentMetrics;
-        setOrderByCols(columns);
-      } else if (type === 'order_desc') {
-        if (queryMode === 'raw') {
-          tempFormData['all_columns'] = allColumns || [];
-          tempFormData['order_by_cols'] = orderByCols;
-        } else {
-          tempFormData['groupby'] = groupby || [];
-          tempFormData['timeseries_limit_metric'] = limitMetric;
-          tempFormData['order_desc'] = columns;
-        }
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = percentMetrics;
-        setOrderDesc(columns);
-      } else if (type === 'timeseries_limit_metric') {
-        if (queryMode === 'raw') {
-          tempFormData['all_columns'] = allColumns || [];
-          tempFormData['order_by_cols'] = orderByCols;
-        } else {
-          tempFormData['groupby'] = groupby || [];
-          tempFormData['timeseries_limit_metric'] = columns;
-          tempFormData['order_desc'] = orderDesc;
-        }
-        tempFormData['metrics'] = metrics;
-        tempFormData['adhoc_filters'] = adhocFilters;
-        tempFormData['percent_metrics'] = percentMetrics;
-        setLimitMetric(columns)
-      }
-    }
-    if (req === true) {
-      makeRequest(tempFormData);
-    }
-    return true;
-  }
+  it('renders the popover with title', () => {
+    render(<FormattingPopover {...defaultProps} />);
+    fireEvent.click(screen.getByText('Mock Child')); // Trigger the popover to show
+    expect(screen.getByText('Test Title')).toBeInTheDocument();
+  });
 
-  const makeRequest = async (tempFormData: any) => {
-    let data = await getChartDataRequest({
-      formData: {...tempFormData},
-      resultFormat: 'json',
-      resultType: 'full',
-      force: false,
-    })
-    if (data && 'json' in data && data['json'] && 'result' in data['json'] && data['json']['result'] && data['json']['result'].length == 1) {
-      setConfigResp(data['json']['result'][0])
-    }
-  }
+  it('sets visibility to true when children are clicked', () => {
+    render(<FormattingPopover {...defaultProps} />);
+    fireEvent.click(screen.getByText('Mock Child')); // Trigger the popover to show
+    expect(screen.getByText('Test Title')).toBeInTheDocument();
+  });
 
-  const handleSave = useCallback(
-    (newConfig: ConditionalFormattingConfigTenant) => {
-      setVisible(false);
-      if (newConfig && newConfig?.tenantId && newConfig?.tenantId === 'Default Chart') {
-        newConfig['defaultTenant'] = true;
-      }
-      onChange(newConfig);
-      setConfigResp({});
-    },
-    [onChange],
-  );
+  it('calls makeRequest when config is available and popover becomes visible', async () => {
+    const config = { tenantId: 1, queryMode: 'aggregate' };
+    const mockFormData = { query_mode: 'aggregate' };
 
-  const handleClose = () => {
-    setVisible(false);
-  }
+    render(<FormattingPopover {...defaultProps} config={config} formData={mockFormData} />);
 
+    fireEvent.click(screen.getByText('Mock Child')); // Trigger the popover to show
 
-  return (
-    <Popover
-      title={title}
-      content={
-        <FormattingPopoverContent
-          onChange={handleSave}
-          config={config}
-          columns={columns}
-          datasource={datasource}
-          configResp={configResp}
-          onColumnChange={onColumnChange}
-          onTenantChange={onTenantChange}
-          vizType={formData?.viz_type}
-          controls={controls}
-          groupByOptions={groupByOptions}
-          setQueryData={setQueryData}
-          queryMode={queryMode}
-          handleClose={handleClose}
-        />
-      }
-      visible={visible}
-      onVisibleChange={setVisible}
-      trigger={['click']}
-      overlayStyle={{ width: '450px', height: '80vh', overflowY: 'scroll' }}
-      {...props}
-    >
-      {children}
-    </Popover>
-  );
-};
+    await waitFor(() => {
+      expect(getChartDataRequest).toHaveBeenCalledWith(expect.objectContaining({
+        formData: expect.objectContaining({
+          tenant_id: 1,
+          query_mode: 'aggregate',
+        }),
+      }));
+    });
+  });
+
+  it('updates state correctly onColumnChange for "groupby"', () => {
+    render(<FormattingPopover {...defaultProps} />);
+
+    fireEvent.click(screen.getByText('Mock Child')); // Trigger the popover to show
+    fireEvent.change(screen.getByText('Mock Child'), { target: { value: 'groupby' } }); // Simulate column change
+
+    expect(getChartDataRequest).toHaveBeenCalled();
+  });
+
+  it('calls onChange with the correct configuration on handleSave', () => {
+    const onChangeMock = jest.fn();
+    const config = { tenantId: 1, queryMode: 'aggregate' };
+
+    render(<FormattingPopover {...defaultProps} config={config} onChange={onChangeMock} />);
+
+    fireEvent.click(screen.getByText('Mock Child')); // Trigger the popover to show
+
+    fireEvent.click(screen.getByText('Save')); // Simulate clicking save button
+
+    expect(onChangeMock).toHaveBeenCalledWith(expect.objectContaining({
+      tenantId: 1,
+    }));
+  });
+
+  it('handles request errors gracefully in makeRequest', async () => {
+    getChartDataRequest.mockImplementation(() => {
+      throw new Error('Request failed');
+    });
+
+    const config = { tenantId: 1, queryMode: 'aggregate' };
+    const mockFormData = { query_mode: 'aggregate' };
+
+    render(<FormattingPopover {...defaultProps} config={config} formData={mockFormData} />);
+
+    fireEvent.click(screen.getByText('Mock Child')); // Trigger the popover to show
+
+    await waitFor(() => {
+      expect(getChartDataRequest).toHaveBeenCalled();
+    });
+  });
+});
