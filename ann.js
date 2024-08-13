@@ -1,48 +1,99 @@
-// utils.test.js
-import { getSort, naturalSort } from './path/to/your/module';
+// PivotData.test.js
+import { PivotData } from './path/to/your/PivotData';
+import PropTypes from 'prop-types';
+import { getSort, naturalSort, flatKey } from './utils';
 
-describe('getSort', () => {
-  test('returns sort function from sorters function', () => {
-    const customSort = jest.fn(() => (a, b) => a - b);
-    const sorters = jest.fn(() => customSort);
-    const result = getSort(sorters, 'someAttr');
-    expect(sorters).toHaveBeenCalledWith('someAttr');
-    expect(result).toBe(customSort);
+jest.mock('prop-types', () => ({
+  checkPropTypes: jest.fn(),
+}));
+
+jest.mock('./utils', () => ({
+  getSort: jest.fn(),
+  naturalSort: jest.fn(),
+  flatKey: jest.fn(),
+}));
+
+describe('PivotData', () => {
+  const defaultProps = {
+    data: [
+      { row: 'A', col: 'X', value: 10 },
+      { row: 'B', col: 'Y', value: 20 },
+    ],
+    rows: ['row'],
+    cols: ['col'],
+    aggregatorName: 'Sum',
+    vals: ['value'],
+    aggregatorsFactory: jest.fn(() => ({
+      Sum: jest.fn(() => ({
+        push: jest.fn(),
+        value: jest.fn(),
+        format: jest.fn(),
+      })),
+    })),
+    sorters: null,
+    rowOrder: 'key_a_to_z',
+    colOrder: 'key_a_to_z',
+    customFormatters: null,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  test('returns a specific sort function from sorters object', () => {
-    const customSort = jest.fn((a, b) => a - b);
-    const sorters = {
-      someAttr: customSort,
-    };
-    const result = getSort(sorters, 'someAttr');
-    expect(result).toBe(customSort);
+  test('should initialize with default and input properties', () => {
+    const instance = new PivotData(defaultProps);
+
+    expect(instance.props).toEqual(expect.objectContaining(defaultProps));
+    expect(PropTypes.checkPropTypes).toHaveBeenCalled();
   });
 
-  test('returns naturalSort when sorters is a function returning non-function', () => {
-    const sorters = jest.fn(() => 'not a function');
-    const result = getSort(sorters, 'someAttr');
-    expect(sorters).toHaveBeenCalledWith('someAttr');
-    expect(result).toBe(naturalSort);
+  test('should call processRecord for each record', () => {
+    const instance = new PivotData(defaultProps);
+
+    const processRecordSpy = jest.spyOn(instance, 'processRecord');
+    instance.props.data.forEach(record => {
+      instance.processRecord(record);
+    });
+
+    expect(processRecordSpy).toHaveBeenCalledTimes(instance.props.data.length);
   });
 
-  test('returns naturalSort when attr is not in sorters object', () => {
-    const sorters = {
-      anotherAttr: jest.fn((a, b) => a - b),
-    };
-    const result = getSort(sorters, 'someAttr');
-    expect(result).toBe(naturalSort);
+  test('should sort row and column keys correctly', () => {
+    const instance = new PivotData(defaultProps);
+
+    const arrSortSpy = jest.spyOn(instance, 'arrSort');
+    instance.sortKeys();
+
+    expect(arrSortSpy).toHaveBeenCalledTimes(2);
   });
 
-  test('returns naturalSort when sorters is null or undefined', () => {
-    const resultNull = getSort(null, 'someAttr');
-    const resultUndefined = getSort(undefined, 'someAttr');
-    expect(resultNull).toBe(naturalSort);
-    expect(resultUndefined).toBe(naturalSort);
+  test('should return sorted row and column keys', () => {
+    const instance = new PivotData(defaultProps);
+
+    const sortedRowKeys = instance.getRowKeys();
+    const sortedColKeys = instance.getColKeys();
+
+    expect(sortedRowKeys).toEqual(instance.rowKeys);
+    expect(sortedColKeys).toEqual(instance.colKeys);
   });
 
-  test('returns naturalSort when no sorters is provided', () => {
-    const result = getSort();
-    expect(result).toBe(naturalSort);
+  test('should return the correct aggregator for given row and col keys', () => {
+    const instance = new PivotData(defaultProps);
+
+    const rowKey = ['A'];
+    const colKey = ['X'];
+    const aggregator = instance.getAggregator(rowKey, colKey);
+
+    expect(aggregator).toBeDefined();
   });
+
+  test('should handle missing row or col key in getAggregator', () => {
+    const instance = new PivotData(defaultProps);
+
+    const aggregator = instance.getAggregator([], []);
+    expect(aggregator.value()).toBeNull();
+    expect(aggregator.format()).toBe('');
+  });
+
+  // Additional tests can be added to cover edge cases, formatted aggregators, and subtotal logic.
 });
