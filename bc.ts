@@ -1,42 +1,106 @@
-import { setAxisShowMaxMin } from './setAxisShowMaxMin'; // Adjust path as necessary
+import transformProps from './transformProps'; // Adjust path as necessary
 
-describe('setAxisShowMaxMin', () => {
-  it('should call axis.showMaxMin with showminmax when axis and showMaxMin are defined', () => {
-    const mockShowMaxMin = jest.fn();
-    const axis = { showMaxMin: mockShowMaxMin };
-    const showminmax = true;
+describe('transformProps', () => {
+  it('should correctly transform the chartProps object', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        colorScheme: 'scheme1',
+        dateTimeFormat: 'YYYY-MM-DD',
+        numberFormat: '0,0',
+        richTooltip: true,
+        roseAreaProportion: false,
+        sliceId: 'slice1',
+      },
+      queriesData: [
+        {
+          data: [
+            { x: 1, y: 10 },
+            { x: 2, y: 20 },
+          ],
+        },
+      ],
+    };
 
-    setAxisShowMaxMin(axis, showminmax);
+    const result = transformProps(chartProps);
 
-    expect(mockShowMaxMin).toHaveBeenCalledWith(showminmax);
+    expect(result).toEqual({
+      width: 800,
+      height: 600,
+      data: [
+        { x: 1, y: 10 },
+        { x: 2, y: 20 },
+      ],
+      colorScheme: 'scheme1',
+      dateTimeFormat: 'YYYY-MM-DD',
+      numberFormat: '0,0',
+      useAreaProportions: false,
+      useRichTooltip: true,
+      sliceId: 'slice1',
+    });
   });
 
-  it('should not call axis.showMaxMin when axis is undefined', () => {
-    const mockShowMaxMin = jest.fn();
-    const axis = undefined;
-    const showminmax = true;
+  it('should handle missing formData properties', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {},
+      queriesData: [
+        {
+          data: [
+            { x: 1, y: 10 },
+            { x: 2, y: 20 },
+          ],
+        },
+      ],
+    };
 
-    setAxisShowMaxMin(axis, showminmax);
+    const result = transformProps(chartProps);
 
-    expect(mockShowMaxMin).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      width: 800,
+      height: 600,
+      data: [
+        { x: 1, y: 10 },
+        { x: 2, y: 20 },
+      ],
+      colorScheme: undefined,
+      dateTimeFormat: undefined,
+      numberFormat: undefined,
+      useAreaProportions: undefined,
+      useRichTooltip: undefined,
+      sliceId: undefined,
+    });
   });
 
-  it('should not call axis.showMaxMin when axis.showMaxMin is undefined', () => {
-    const mockShowMaxMin = jest.fn();
-    const axis = {};
-    const showminmax = true;
+  it('should handle missing queriesData', () => {
+    const chartProps = {
+      width: 800,
+      height: 600,
+      formData: {
+        colorScheme: 'scheme1',
+        dateTimeFormat: 'YYYY-MM-DD',
+        numberFormat: '0,0',
+        richTooltip: true,
+        roseAreaProportion: false,
+        sliceId: 'slice1',
+      },
+      queriesData: [],
+    };
 
-    setAxisShowMaxMin(axis, showminmax);
+    const result = transformProps(chartProps);
 
-    expect(mockShowMaxMin).not.toHaveBeenCalled();
-  });
-
-  it('should not call axis.showMaxMin when showminmax is undefined', () => {
-    const mockShowMaxMin = jest.fn();
-    const axis = { showMaxMin: mockShowMaxMin };
-
-    setAxisShowMaxMin(axis, undefined);
-
-    expect(mockShowMaxMin).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      width: 800,
+      height: 600,
+      data: undefined,
+      colorScheme: 'scheme1',
+      dateTimeFormat: 'YYYY-MM-DD',
+      numberFormat: '0,0',
+      useAreaProportions: false,
+      useRichTooltip: true,
+      sliceId: 'slice1',
+    });
   });
 });
