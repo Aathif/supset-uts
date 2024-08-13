@@ -1,87 +1,210 @@
-import handleResourceExport from './handleResourceExport'; // Adjust path as necessary
-import parseCookie from 'src/utils/parseCookie';
-import rison from 'rison';
-import { nanoid } from 'nanoid';
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import {
+  getTimeFormatterRegistry,
+  SMART_DATE_ID,
+  createSmartDateFormatter,
+} from '@superset-ui/core';
 
-// Mock dependencies
-jest.mock('src/utils/parseCookie');
-jest.mock('rison');
-jest.mock('nanoid', () => ({
-  nanoid: jest.fn(() => 'mocked-token'),
-}));
+import {
+  computeStackedYDomain,
+  computeYDomain,
+  getTimeOrNumberFormatter,
+  formatLabel,
+  tryNumify,
+} from '../src/utils';
 
-describe('handleResourceExport', () => {
+const DATA = [
+  {
+    key: ['East Asia & Pacific'],
+    values: [
+      {
+        x: -315619200000.0,
+        y: 1031863394.0,
+      },
+      {
+        x: -283996800000.0,
+        y: 1034767718.0,
+      },
+    ],
+  },
+  {
+    key: ['South Asia'],
+    values: [
+      {
+        x: -315619200000.0,
+        y: 572036107.0,
+      },
+      {
+        x: -283996800000.0,
+        y: 584143236.0,
+      },
+    ],
+  },
+  {
+    key: ['Europe & Central Asia'],
+    values: [
+      {
+        x: -315619200000.0,
+        y: 660881033.0,
+      },
+      {
+        x: -283996800000.0,
+        y: 668526708.0,
+      },
+    ],
+  },
+];
+
+const DATA_WITH_DISABLED_SERIES = [
+  {
+    disabled: true,
+    key: ['East Asia & Pacific'],
+    values: [
+      {
+        x: -315619200000.0,
+        y: 1031863394.0,
+      },
+      {
+        x: -283996800000.0,
+        y: 1034767718.0,
+      },
+    ],
+  },
+  {
+    disabled: true,
+    key: ['South Asia'],
+    values: [
+      {
+        x: -315619200000.0,
+        y: 572036107.0,
+      },
+      {
+        x: -283996800000.0,
+        y: 584143236.0,
+      },
+    ],
+  },
+  {
+    key: ['Europe & Central Asia'],
+    values: [
+      {
+        x: -315619200000.0,
+        y: 660881033.0,
+      },
+      {
+        x: -283996800000.0,
+        y: 668526708.0,
+      },
+    ],
+  },
+];
+
+describe('nvd3/utils', () => {
   beforeEach(() => {
-    // Clear mocks before each test
-    jest.clearAllMocks();
-    // Reset any changes to document.body or other global objects
-    document.body.innerHTML = '';
+    getTimeFormatterRegistry().registerValue(
+      SMART_DATE_ID,
+      createSmartDateFormatter(),
+    );
   });
 
-  it('should create an iframe and append it to the document body', () => {
-    const resource = 'some-resource';
-    const ids = [1, 2, 3];
-    const done = jest.fn();
-
-    handleResourceExport(resource, ids, done);
-
-    const iframe = document.querySelector('iframe');
-    expect(iframe).not.toBeNull();
-    expect(iframe?.src).toBe(`/api/v1/${resource}/export/?q=${rison.encode(ids)}&token=mocked-token`);
-    expect(iframe?.style.display).toBe('none');
-    expect(document.body.contains(iframe!)).toBe(true);
+  describe('getTimeOrNumberFormatter(format)', () => {
+    it('is a function', () => {
+      expect(typeof getTimeOrNumberFormatter).toBe('function');
+    });
+    it('returns a date formatter if format is smart_date', () => {
+      const time = new Date(Date.UTC(2018, 10, 21, 22, 11));
+      expect(getTimeOrNumberFormatter('smart_date')(time)).toBe('10:11');
+    });
+    it('returns a number formatter otherwise', () => {
+      expect(getTimeOrNumberFormatter('.3s')(3000000)).toBe('3.00M');
+      expect(getTimeOrNumberFormatter()(3000100)).toBe('3M');
+    });
   });
 
-  it('should call the done callback when cookie indicates export is done', () => {
-    const resource = 'some-resource';
-    const ids = [1, 2, 3];
-    const done = jest.fn();
-    const cookieMock = { 'mocked-token': 'done' };
+  describe('formatLabel()', () => {
+    const verboseMap = {
+      foo: 'Foo',
+      bar: 'Bar',
+    };
 
-    (parseCookie as jest.Mock).mockReturnValue(cookieMock);
-    jest.useFakeTimers();
-
-    handleResourceExport(resource, ids, done);
-
-    // Fast-forward the timers
-    jest.advanceTimersByTime(200);
-
-    expect(done).toHaveBeenCalled();
+    it('formats simple labels', () => {
+      expect(formatLabel('foo')).toBe('foo');
+      expect(formatLabel(['foo'])).toBe('foo');
+      expect(formatLabel(['foo', 'bar'])).toBe('foo, bar');
+    });
+    it('formats simple labels with lookups', () => {
+      expect(formatLabel('foo', verboseMap)).toBe('Foo');
+      expect(formatLabel('baz', verboseMap)).toBe('baz');
+      expect(formatLabel(['foo'], verboseMap)).toBe('Foo');
+      expect(formatLabel(['foo', 'bar', 'baz'], verboseMap)).toBe(
+        'Foo, Bar, baz',
+      );
+    });
+    it('deals with time shift properly', () => {
+      expect(formatLabel(['foo', '1 hour offset'], verboseMap)).toBe(
+        'Foo, 1 hour offset',
+      );
+      expect(
+        formatLabel(['foo', 'bar', 'baz', '2 hours offset'], verboseMap),
+      ).toBe('Foo, Bar, baz, 2 hours offset');
+    });
   });
 
-  it('should remove the iframe and clear the interval when export is done', () => {
-    const resource = 'some-resource';
-    const ids = [1, 2, 3];
-    const done = jest.fn();
-    const cookieMock = { 'mocked-token': 'done' };
-
-    (parseCookie as jest.Mock).mockReturnValue(cookieMock);
-    jest.useFakeTimers();
-
-    handleResourceExport(resource, ids, done);
-
-    // Fast-forward the timers
-    jest.advanceTimersByTime(200);
-
-    const iframe = document.querySelector('iframe');
-    expect(iframe).toBeNull();
-    expect(clearInterval).toHaveBeenCalled();
+  describe('tryNumify()', () => {
+    it('tryNumify works as expected', () => {
+      expect(tryNumify(5)).toBe(5);
+      expect(tryNumify('5')).toBe(5);
+      expect(tryNumify('5.1')).toBe(5.1);
+      expect(tryNumify('a string')).toBe('a string');
+    });
   });
 
-  it('should handle the case when cookie does not indicate export is done', () => {
-    const resource = 'some-resource';
-    const ids = [1, 2, 3];
-    const done = jest.fn();
-    const cookieMock = { 'mocked-token': 'not-done' };
+  describe('computeYDomain()', () => {
+    it('works with invalid data', () => {
+      expect(computeYDomain('foo')).toEqual([0, 1]);
+    });
 
-    (parseCookie as jest.Mock).mockReturnValue(cookieMock);
-    jest.useFakeTimers();
+    it('works with all series enabled', () => {
+      expect(computeYDomain(DATA)).toEqual([572036107.0, 1034767718.0]);
+    });
 
-    handleResourceExport(resource, ids, done);
+    it('works with some series disabled', () => {
+      expect(computeYDomain(DATA_WITH_DISABLED_SERIES)).toEqual([
+        660881033.0, 668526708.0,
+      ]);
+    });
+  });
 
-    // Advance time but should not trigger done callback
-    jest.advanceTimersByTime(200);
+  describe('computeStackedYDomain()', () => {
+    it('works with invalid data', () => {
+      expect(computeStackedYDomain('foo')).toEqual([0, 1]);
+    });
 
-    expect(done).not.toHaveBeenCalled();
+    it('works with all series enabled', () => {
+      expect(computeStackedYDomain(DATA)).toEqual([0, 2287437662.0]);
+    });
+
+    it('works with some series disabled', () => {
+      expect(computeStackedYDomain(DATA_WITH_DISABLED_SERIES)).toEqual([
+        0, 668526708.0,
+      ]);
+    });
   });
 });
