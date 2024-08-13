@@ -1,37 +1,31 @@
-it('should trim and remove " (right axis)" from the input', () => {
-    const input = ' color1 (right axis), color2 (right axis) ';
-    const result = cleanColorInput(input);
-    expect(result).toBe('color1, color2');
+describe('stringifyTimeRange', () => {
+  it('should return null if any item in the extent does not have toISOString method', () => {
+    const extent = [new Date(), { notADate: 'value' }];
+    const result = stringifyTimeRange(extent);
+    expect(result).toBeNull();
   });
 
-  it('should split the input by ", ", filter out matches to TIME_SHIFT_PATTERN, and join back', () => {
-    const input = 'color1, color2 (right axis), color3, time shift';
-    // Mock TIME_SHIFT_PATTERN for this test case
-    const mockTimeShiftPattern = /time shift/;
-    const result = cleanColorInput(input);
-    expect(result).toBe('color1, color3');
+  it('should return a formatted string if all items in the extent have toISOString method', () => {
+    const extent = [new Date('2024-08-01T10:00:00Z'), new Date('2024-08-02T12:00:00Z')];
+    const result = stringifyTimeRange(extent);
+    expect(result).toBe('2024-08-01T10:00:00 : 2024-08-02T12:00:00');
   });
 
-  it('should handle empty input', () => {
-    const input = '';
-    const result = cleanColorInput(input);
+  it('should handle an empty extent array', () => {
+    const extent: Date[] = [];
+    const result = stringifyTimeRange(extent);
     expect(result).toBe('');
   });
 
-  it('should handle input with only " (right axis)" text', () => {
-    const input = 'color1 (right axis), color2 (right axis)';
-    const result = cleanColorInput(input);
-    expect(result).toBe('');
+  it('should handle a single item in the extent array', () => {
+    const extent = [new Date('2024-08-01T10:00:00Z')];
+    const result = stringifyTimeRange(extent);
+    expect(result).toBe('2024-08-01T10:00:00');
   });
 
-  it('should handle input without " (right axis)" and no TIME_SHIFT_PATTERN matches', () => {
-    const input = 'color1, color2, color3';
-    const result = cleanColorInput(input);
-    expect(result).toBe('color1, color2, color3');
+  it('should handle invalid date objects', () => {
+    const extent = [new Date('invalid-date'), new Date('2024-08-02T12:00:00Z')];
+    const result = stringifyTimeRange(extent);
+    expect(result).toBe('Invalid Date : 2024-08-02T12:00:00');
   });
-
-  it('should handle input with multiple spaces', () => {
-    const input = '  color1  ,   color2 (right axis) , color3  ';
-    const result = cleanColorInput(input);
-    expect(result).toBe('color1, color3');
-  });
+});
