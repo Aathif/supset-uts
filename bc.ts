@@ -1,111 +1,156 @@
-import { styled } from '@superset-ui/core';
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { PluginFilterTimeProps } from './types';
-import { FilterPluginStyle } from '../common';
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import moment from 'moment';
+import DateFilterPlugin from './DateFilterPlugin';
 import { RangePicker } from 'src/components/DatePicker';
-import moment, { Moment } from 'moment';
-import {
-  MOMENT_FORMAT,
-} from 'src/explore/components/controls/DateFilterControl/utils';
 
-const TimeFilterStyles = styled(FilterPluginStyle)`
-  overflow-x: auto;
-`;
+jest.mock('src/components/DatePicker', () => ({
+  RangePicker: jest.fn(({ onChange }) => (
+    <input
+      data-testid="range-picker"
+      onChange={e => onChange(e.target.value, [moment(), moment().add(1, 'day')])}
+    />
+  )),
+}));
 
-export default function DateFilterPlugin(props: PluginFilterTimeProps) {
-  const {
-    setDataMask,
-    width,
-    height,
-    filterState,
-  } = props;
-
-  const { enableTime, monthlyFilter, quarterFilter, yearlyFilter, customDateFormat, displayDateFormat, displayTimeFormat, timeWith12hoursFormat } = props?.formData
-
-  const handleTimeRangeChange = useCallback(
-    (timeRange: any, dates: any): void => {
-      let isSet = '';
-      if (dates && dates.length === 2) {
-        if (monthlyFilter === true) {
-          let minDate = dates?.[0];
-          let maxDate = dates?.[1];
-          let minYear = moment(minDate, displayDateFormat).format('YYYY');
-          let minMonth = moment(minDate, displayDateFormat).format('MM');
-          minDate = moment(`01-${minMonth}-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
-
-          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
-          let maxMonth = moment(maxDate, displayDateFormat).format('MM');
-          maxDate = moment(`${moment(maxDate, displayDateFormat).endOf('month').format('D')}-${maxMonth}-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`
-        } else if (quarterFilter === true) {
-          let minDate = dates?.[0];
-          let maxDate = dates?.[1];
-          let minYear = moment(minDate, displayDateFormat).format('YYYY');
-          let minMonth = moment(minDate, displayDateFormat).startOf('quarter').format('MM');
-          minDate = moment(`01-${minMonth}-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
-
-          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
-          let maxMonth = moment(maxDate, displayDateFormat).endOf('quarter').format('MM');
-          let maxDay = moment(maxDate, displayDateFormat).endOf('quarter').format('D');
-          maxDate = moment(`${maxDay}-${maxMonth}-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`;
-        } else if (yearlyFilter === true) {
-          let minDate = dates?.[0];
-          let maxDate = dates?.[1];
-          let minYear = moment(minDate, displayDateFormat).format('YYYY');
-          minDate = moment(`01-01-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
-          maxDate = moment(`31-12-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`;
-        } else {
-          let minDate = moment(dates?.[0], displayDateFormat).format(customDateFormat);
-          let maxDate = moment(dates?.[1], displayDateFormat).format(customDateFormat);
-          isSet = `${minDate} : ${maxDate}`;
-        }
-      }
-      updateDataMask(isSet);
+describe('DateFilterPlugin', () => {
+  const defaultProps = {
+    setDataMask: jest.fn(),
+    width: 400,
+    height: 300,
+    filterState: {},
+    formData: {
+      enableTime: false,
+      monthlyFilter: false,
+      quarterFilter: false,
+      yearlyFilter: false,
+      customDateFormat: 'YYYY-MM-DD',
+      displayDateFormat: 'YYYY-MM-DD',
+      displayTimeFormat: 'HH:mm:ss',
+      timeWith12hoursFormat: false,
+      inView: true,
     },
-    [setDataMask],
-  );
+  };
 
-  const updateDataMask = (isSet: any) => {
-    setDataMask({
-      extraFormData: isSet
-        ? {
-            time_range: isSet,
-          }
-        : {},
+  it('renders without crashing', () => {
+    render(<DateFilterPlugin {...defaultProps} />);
+    expect(screen.getByTestId('range-picker')).toBeInTheDocument();
+  });
+
+  it('handles date range change and updates data mask correctly', () => {
+    render(<DateFilterPlugin {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId('range-picker'), {
+      target: { value: '2024-01-01 : 2024-12-31' },
+    });
+
+    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
+      extraFormData: {
+        time_range: '2024-01-01 : 2024-12-31',
+      },
       filterState: {
-        value: isSet ? isSet : undefined,
+        value: '2024-01-01 : 2024-12-31',
       },
     });
-  }
+  });
 
-  useEffect(() => {
-    updateDataMask(filterState?.value);
-  }, [filterState?.value]);
+  it('applies monthly filter correctly', () => {
+    const modifiedProps = {
+      ...defaultProps,
+      formData: {
+        ...defaultProps.formData,
+        monthlyFilter: true,
+      },
+    };
 
-  const momentValue = useMemo((): [Moment, Moment] | null => {
-    let value = filterState?.value;
-    if (value && value.includes(' : ')) {
-      value = value.split(' : ');
-      return [moment(value[0]), moment(value[1])];
-    }
-    return null;
-  }, [filterState?.value]);
+    render(<DateFilterPlugin {...modifiedProps} />);
 
-  return props.formData?.inView ? (
-    // @ts-ignore
-    <TimeFilterStyles width={width} height={height}>
-      <RangePicker
-        allowClear={false}
-        format={displayDateFormat ? displayDateFormat : (enableTime === true ? MOMENT_FORMAT : 'YYYY-MM-DD')}
-        onChange={handleTimeRangeChange}
-        showTime={enableTime === true ? { format: displayTimeFormat }: false}
-        use12Hours={(enableTime == true && timeWith12hoursFormat === true) ? true : false}
-        value={momentValue}
-        picker={monthlyFilter === true ? 'month' : quarterFilter === true ? 'quarter' : yearlyFilter === true ? 'year' : undefined}
-      />
-    </TimeFilterStyles>
-  ) : null;
-}
+    fireEvent.change(screen.getByTestId('range-picker'), {
+      target: { value: '2024-01-01 : 2024-12-31' },
+    });
+
+    const expectedMinDate = moment('2024-01-01').startOf('month').format('YYYY-MM-DD');
+    const expectedMaxDate = moment('2024-12-31').endOf('month').format('YYYY-MM-DD');
+
+    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
+      extraFormData: {
+        time_range: `${expectedMinDate} : ${expectedMaxDate}`,
+      },
+      filterState: {
+        value: `${expectedMinDate} : ${expectedMaxDate}`,
+      },
+    });
+  });
+
+  it('applies quarterly filter correctly', () => {
+    const modifiedProps = {
+      ...defaultProps,
+      formData: {
+        ...defaultProps.formData,
+        quarterFilter: true,
+      },
+    };
+
+    render(<DateFilterPlugin {...modifiedProps} />);
+
+    fireEvent.change(screen.getByTestId('range-picker'), {
+      target: { value: '2024-01-01 : 2024-12-31' },
+    });
+
+    const expectedMinDate = moment('2024-01-01').startOf('quarter').format('YYYY-MM-DD');
+    const expectedMaxDate = moment('2024-12-31').endOf('quarter').format('YYYY-MM-DD');
+
+    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
+      extraFormData: {
+        time_range: `${expectedMinDate} : ${expectedMaxDate}`,
+      },
+      filterState: {
+        value: `${expectedMinDate} : ${expectedMaxDate}`,
+      },
+    });
+  });
+
+  it('applies yearly filter correctly', () => {
+    const modifiedProps = {
+      ...defaultProps,
+      formData: {
+        ...defaultProps.formData,
+        yearlyFilter: true,
+      },
+    };
+
+    render(<DateFilterPlugin {...modifiedProps} />);
+
+    fireEvent.change(screen.getByTestId('range-picker'), {
+      target: { value: '2024-01-01 : 2024-12-31' },
+    });
+
+    const expectedMinDate = '2024-01-01';
+    const expectedMaxDate = '2024-12-31';
+
+    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
+      extraFormData: {
+        time_range: `${expectedMinDate} : ${expectedMaxDate}`,
+      },
+      filterState: {
+        value: `${expectedMinDate} : ${expectedMaxDate}`,
+      },
+    });
+  });
+
+  it('handles empty time range correctly', () => {
+    render(<DateFilterPlugin {...defaultProps} />);
+
+    fireEvent.change(screen.getByTestId('range-picker'), {
+      target: { value: '' },
+    });
+
+    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
+      extraFormData: {},
+      filterState: {
+        value: undefined,
+      },
+    });
+  });
+});
