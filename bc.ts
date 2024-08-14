@@ -1,94 +1,111 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
-import ColumnConfigPopover from './ColumnConfigPopover';
-import { GenericDataType } from '@superset-ui/core';
-import { SHARED_COLUMN_CONFIG_PROPS } from './constants';
+import { styled } from '@superset-ui/core';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { PluginFilterTimeProps } from './types';
+import { FilterPluginStyle } from '../common';
+import { RangePicker } from 'src/components/DatePicker';
+import moment, { Moment } from 'moment';
+import {
+  MOMENT_FORMAT,
+} from 'src/explore/components/controls/DateFilterControl/utils';
 
-describe('ColumnConfigPopover', () => {
-  const defaultProps = {
-    column: {
-      type: GenericDataType.String,
-      config: {},
+const TimeFilterStyles = styled(FilterPluginStyle)`
+  overflow-x: auto;
+`;
+
+export default function DateFilterPlugin(props: PluginFilterTimeProps) {
+  const {
+    setDataMask,
+    width,
+    height,
+    filterState,
+  } = props;
+
+  const { enableTime, monthlyFilter, quarterFilter, yearlyFilter, customDateFormat, displayDateFormat, displayTimeFormat, timeWith12hoursFormat } = props?.formData
+
+  const handleTimeRangeChange = useCallback(
+    (timeRange: any, dates: any): void => {
+      let isSet = '';
+      if (dates && dates.length === 2) {
+        if (monthlyFilter === true) {
+          let minDate = dates?.[0];
+          let maxDate = dates?.[1];
+          let minYear = moment(minDate, displayDateFormat).format('YYYY');
+          let minMonth = moment(minDate, displayDateFormat).format('MM');
+          minDate = moment(`01-${minMonth}-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
+
+          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
+          let maxMonth = moment(maxDate, displayDateFormat).format('MM');
+          maxDate = moment(`${moment(maxDate, displayDateFormat).endOf('month').format('D')}-${maxMonth}-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
+          isSet = `${minDate} : ${maxDate}`
+        } else if (quarterFilter === true) {
+          let minDate = dates?.[0];
+          let maxDate = dates?.[1];
+          let minYear = moment(minDate, displayDateFormat).format('YYYY');
+          let minMonth = moment(minDate, displayDateFormat).startOf('quarter').format('MM');
+          minDate = moment(`01-${minMonth}-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
+
+          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
+          let maxMonth = moment(maxDate, displayDateFormat).endOf('quarter').format('MM');
+          let maxDay = moment(maxDate, displayDateFormat).endOf('quarter').format('D');
+          maxDate = moment(`${maxDay}-${maxMonth}-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
+          isSet = `${minDate} : ${maxDate}`;
+        } else if (yearlyFilter === true) {
+          let minDate = dates?.[0];
+          let maxDate = dates?.[1];
+          let minYear = moment(minDate, displayDateFormat).format('YYYY');
+          minDate = moment(`01-01-${minYear}`, 'DD-MM-YYYY').format(customDateFormat);
+          let maxYear = moment(maxDate, displayDateFormat).format('YYYY');
+          maxDate = moment(`31-12-${maxYear}`, 'DD-MM-YYYY').format(customDateFormat);
+          isSet = `${minDate} : ${maxDate}`;
+        } else {
+          let minDate = moment(dates?.[0], displayDateFormat).format(customDateFormat);
+          let maxDate = moment(dates?.[1], displayDateFormat).format(customDateFormat);
+          isSet = `${minDate} : ${maxDate}`;
+        }
+      }
+      updateDataMask(isSet);
     },
-    configFormLayout: {
-      [GenericDataType.String]: [
-        ['prop1', 'prop2'],
-        [{ name: 'prop3', config: {} }],
-      ],
-    },
-    onChange: jest.fn(),
-    cols: 24,
-  };
+    [setDataMask],
+  );
 
-  it('renders the correct number of ControlFormItems', () => {
-    render(<ColumnConfigPopover {...defaultProps} />);
-
-    // Check if ControlFormItems with prop1, prop2, and prop3 are rendered
-    expect(screen.getByRole('textbox', { name: /prop1/i })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /prop2/i })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: /prop3/i })).toBeInTheDocument();
-  });
-
-  it('calls onChange when a form item is changed', () => {
-    render(<ColumnConfigPopover {...defaultProps} />);
-
-    const input = screen.getByRole('textbox', { name: /prop1/i });
-    fireEvent.change(input, { target: { value: 'new value' } });
-
-    expect(defaultProps.onChange).toHaveBeenCalled();
-  });
-
-  it('applies shared column config props correctly', () => {
-    const modifiedProps = {
-      ...defaultProps,
-      configFormLayout: {
-        [GenericDataType.String]: [['prop1']],
+  const updateDataMask = (isSet: any) => {
+    setDataMask({
+      extraFormData: isSet
+        ? {
+            time_range: isSet,
+          }
+        : {},
+      filterState: {
+        value: isSet ? isSet : undefined,
       },
-    };
+    });
+  }
 
-    render(<ColumnConfigPopover {...modifiedProps} />);
+  useEffect(() => {
+    updateDataMask(filterState?.value);
+  }, [filterState?.value]);
 
-    // Check if the props from SHARED_COLUMN_CONFIG_PROPS are applied
-    const sharedProps = SHARED_COLUMN_CONFIG_PROPS['prop1'];
-    expect(screen.getByRole('textbox', { name: /prop1/i })).toHaveAttribute(
-      'placeholder',
-      sharedProps?.placeholder || ''
-    );
-  });
+  const momentValue = useMemo((): [Moment, Moment] | null => {
+    let value = filterState?.value;
+    if (value && value.includes(' : ')) {
+      value = value.split(' : ');
+      return [moment(value[0]), moment(value[1])];
+    }
+    return null;
+  }, [filterState?.value]);
 
-  it('renders correct form layout based on column type', () => {
-    const modifiedProps = {
-      ...defaultProps,
-      column: {
-        type: GenericDataType.Number,
-        config: {},
-      },
-      configFormLayout: {
-        [GenericDataType.Number]: [['numericProp1']],
-      },
-    };
-
-    render(<ColumnConfigPopover {...modifiedProps} />);
-
-    // Check if ControlFormItem with numericProp1 is rendered based on Number type
-    expect(
-      screen.getByRole('textbox', { name: /numericProp1/i })
-    ).toBeInTheDocument();
-  });
-
-  it('handles undefined column type by defaulting to GenericDataType.String', () => {
-    const modifiedProps = {
-      ...defaultProps,
-      column: {
-        type: undefined,
-        config: {},
-      },
-    };
-
-    render(<ColumnConfigPopover {...modifiedProps} />);
-
-    // Check if it defaults to GenericDataType.String and renders the correct form layout
-    expect(screen.getByRole('textbox', { name: /prop1/i })).toBeInTheDocument();
-  });
-});
+  return props.formData?.inView ? (
+    // @ts-ignore
+    <TimeFilterStyles width={width} height={height}>
+      <RangePicker
+        allowClear={false}
+        format={displayDateFormat ? displayDateFormat : (enableTime === true ? MOMENT_FORMAT : 'YYYY-MM-DD')}
+        onChange={handleTimeRangeChange}
+        showTime={enableTime === true ? { format: displayTimeFormat }: false}
+        use12Hours={(enableTime == true && timeWith12hoursFormat === true) ? true : false}
+        value={momentValue}
+        picker={monthlyFilter === true ? 'month' : quarterFilter === true ? 'quarter' : yearlyFilter === true ? 'year' : undefined}
+      />
+    </TimeFilterStyles>
+  ) : null;
+}
