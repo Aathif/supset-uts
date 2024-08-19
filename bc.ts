@@ -1,156 +1,65 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render } from '@testing-library/react';
+import Calendar from './Calendar';
 import '@testing-library/jest-dom/extend-expect';
-import moment from 'moment';
-import DateFilterPlugin from './DateFilterPlugin';
-import { RangePicker } from 'src/components/DatePicker';
 
-jest.mock('src/components/DatePicker', () => ({
-  RangePicker: jest.fn(({ onChange }) => (
-    <input
-      data-testid="range-picker"
-      onChange={e => onChange(e.target.value, [moment(), moment().add(1, 'day')])}
-    />
-  )),
-}));
-
-describe('DateFilterPlugin', () => {
+describe('Calendar Component', () => {
   const defaultProps = {
-    setDataMask: jest.fn(),
-    width: 400,
-    height: 300,
-    filterState: {},
-    formData: {
-      enableTime: false,
-      monthlyFilter: false,
-      quarterFilter: false,
-      yearlyFilter: false,
-      customDateFormat: 'YYYY-MM-DD',
-      displayDateFormat: 'YYYY-MM-DD',
-      displayTimeFormat: 'HH:mm:ss',
-      timeWith12hoursFormat: false,
-      inView: true,
+    data: {
+      data: {
+        metric1: { 1535034236.0: 3, 1535034237.0: 5 },
+      },
+      domain: 'month',
+      range: 12,
+      start: Date.now(),
+      subdomain: 'day',
     },
+    height: 500,
+    cellPadding: 3,
+    cellRadius: 0,
+    cellSize: 10,
+    linearColorScheme: 'schemeBlues',
+    showLegend: true,
+    showMetricName: true,
+    showValues: true,
+    steps: 5,
+    timeFormatter: value => value,
+    valueFormatter: value => value,
+    verboseMap: { metric1: 'Metric 1' },
+    theme: { colors: { grayscale: { light5: '#ccc' } } },
   };
 
-  it('renders without crashing', () => {
-    render(<DateFilterPlugin {...defaultProps} />);
-    expect(screen.getByTestId('range-picker')).toBeInTheDocument();
+  test('renders the Calendar component with default props', () => {
+    const { container } = render(<Calendar {...defaultProps} />);
+    expect(container).toBeInTheDocument();
+    expect(container.querySelector('.superset-legacy-chart-calendar')).toBeInTheDocument();
   });
 
-  it('handles date range change and updates data mask correctly', () => {
-    render(<DateFilterPlugin {...defaultProps} />);
-
-    fireEvent.change(screen.getByTestId('range-picker'), {
-      target: { value: '2024-01-01 : 2024-12-31' },
-    });
-
-    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
-      extraFormData: {
-        time_range: '2024-01-01 : 2024-12-31',
-      },
-      filterState: {
-        value: '2024-01-01 : 2024-12-31',
-      },
-    });
+  test('renders metric name when showMetricName is true', () => {
+    const { getByText } = render(<Calendar {...defaultProps} />);
+    expect(getByText('Metric: Metric 1')).toBeInTheDocument();
   });
 
-  it('applies monthly filter correctly', () => {
-    const modifiedProps = {
-      ...defaultProps,
-      formData: {
-        ...defaultProps.formData,
-        monthlyFilter: true,
-      },
-    };
-
-    render(<DateFilterPlugin {...modifiedProps} />);
-
-    fireEvent.change(screen.getByTestId('range-picker'), {
-      target: { value: '2024-01-01 : 2024-12-31' },
-    });
-
-    const expectedMinDate = moment('2024-01-01').startOf('month').format('YYYY-MM-DD');
-    const expectedMaxDate = moment('2024-12-31').endOf('month').format('YYYY-MM-DD');
-
-    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
-      extraFormData: {
-        time_range: `${expectedMinDate} : ${expectedMaxDate}`,
-      },
-      filterState: {
-        value: `${expectedMinDate} : ${expectedMaxDate}`,
-      },
-    });
+  test('does not render metric name when showMetricName is false', () => {
+    const { queryByText } = render(
+      <Calendar {...defaultProps} showMetricName={false} />
+    );
+    expect(queryByText('Metric: Metric 1')).not.toBeInTheDocument();
   });
 
-  it('applies quarterly filter correctly', () => {
-    const modifiedProps = {
-      ...defaultProps,
-      formData: {
-        ...defaultProps.formData,
-        quarterFilter: true,
-      },
-    };
-
-    render(<DateFilterPlugin {...modifiedProps} />);
-
-    fireEvent.change(screen.getByTestId('range-picker'), {
-      target: { value: '2024-01-01 : 2024-12-31' },
-    });
-
-    const expectedMinDate = moment('2024-01-01').startOf('quarter').format('YYYY-MM-DD');
-    const expectedMaxDate = moment('2024-12-31').endOf('quarter').format('YYYY-MM-DD');
-
-    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
-      extraFormData: {
-        time_range: `${expectedMinDate} : ${expectedMaxDate}`,
-      },
-      filterState: {
-        value: `${expectedMinDate} : ${expectedMaxDate}`,
-      },
-    });
+  test('renders the correct number of cells based on data', () => {
+    const { container } = render(<Calendar {...defaultProps} />);
+    // Check if the expected number of cells are rendered
+    expect(container.querySelectorAll('.cal-heatmap-container .subdomain-cell').length).toBe(2);
   });
 
-  it('applies yearly filter correctly', () => {
-    const modifiedProps = {
-      ...defaultProps,
-      formData: {
-        ...defaultProps.formData,
-        yearlyFilter: true,
-      },
-    };
-
-    render(<DateFilterPlugin {...modifiedProps} />);
-
-    fireEvent.change(screen.getByTestId('range-picker'), {
-      target: { value: '2024-01-01 : 2024-12-31' },
-    });
-
-    const expectedMinDate = '2024-01-01';
-    const expectedMaxDate = '2024-12-31';
-
-    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
-      extraFormData: {
-        time_range: `${expectedMinDate} : ${expectedMaxDate}`,
-      },
-      filterState: {
-        value: `${expectedMinDate} : ${expectedMaxDate}`,
-      },
-    });
+  test('renders the legend when showLegend is true', () => {
+    const { container } = render(<Calendar {...defaultProps} showLegend={true} />);
+    expect(container.querySelector('.cal-heatmap-container .legend')).toBeInTheDocument();
   });
 
-  it('handles empty time range correctly', () => {
-    render(<DateFilterPlugin {...defaultProps} />);
-
-    fireEvent.change(screen.getByTestId('range-picker'), {
-      target: { value: '' },
-    });
-
-    expect(defaultProps.setDataMask).toHaveBeenCalledWith({
-      extraFormData: {},
-      filterState: {
-        value: undefined,
-      },
-    });
+  test('does not render the legend when showLegend is false', () => {
+    const { container } = render(<Calendar {...defaultProps} showLegend={false} />);
+    expect(container.querySelector('.cal-heatmap-container .legend')).not.toBeInTheDocument();
   });
 });
