@@ -1,119 +1,185 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import ScheduleQueryButton from './ScheduleQueryButton';
+import handleDrop from './handleDrop';
+import getDropPosition, {
+  clearDropCache,
+  DROP_FORBIDDEN,
+} from '../../util/getDropPosition';
 
-// Mock dependencies
-jest.mock('@superset-ui/core', () => ({
-  t: (str: string) => str, // Mock translation function
-  styled: (component: any) => component,
+jest.mock('../../util/getDropPosition', () => ({
+  __esModule: true,
+  default: jest.fn(),
+  clearDropCache: jest.fn(),
+  DROP_FORBIDDEN: 'DROP_FORBIDDEN',
 }));
 
-jest.mock('src/utils/getBootstrapData', () => () => ({
-  common: {
-    conf: {
-      SCHEDULED_QUERIES: {
-        JSONSCHEMA: {
-          properties: {
-            schedule_type: {
-              type: 'string',
-              default: 'daily',
-              format: 'date-time',
-            },
-          },
+describe('handleDrop', () => {
+  let monitor, Component, props;
+
+  beforeEach(() => {
+    monitor = {
+      getItem: jest.fn(),
+    };
+
+    Component = {
+      mounted: true,
+      setState: jest.fn(),
+      props: {
+        parentComponent: null,
+        component: {
+          id: 'component-1',
+          type: 'COMPONENT_TYPE',
+          children: [],
         },
-        UISCHEMA: {},
-        VALIDATION: [],
+        index: 0,
+        onDrop: jest.fn(),
+        dropToChild: false,
       },
-    },
-  },
-}));
+    };
 
-describe('ScheduleQueryButton', () => {
-  const defaultProps = {
-    defaultLabel: 'Test Query',
-    sql: 'SELECT * FROM table',
-    schema: 'public',
-    dbId: 1,
-    onSchedule: jest.fn(),
-    scheduleQueryWarning: 'Test Warning',
-    tooltip: 'Tooltip Text',
-    disabled: false,
-  };
-
-  it('renders the schedule button', () => {
-    render(<ScheduleQueryButton {...defaultProps} />);
-    expect(screen.getByText('Schedule')).toBeInTheDocument();
+    props = {};
   });
 
-  it('opens the modal when the schedule button is clicked', () => {
-    render(<ScheduleQueryButton {...defaultProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
-    expect(screen.getByText('Schedule query')).toBeInTheDocument();
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('renders label and description inputs', () => {
-    render(<ScheduleQueryButton {...defaultProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
-    
-    expect(screen.getByLabelText('Label')).toBeInTheDocument();
-    expect(screen.getByLabelText('Description')).toBeInTheDocument();
+  it('should return undefined if the component is not mounted', () => {
+    Component.mounted = false;
+    const result = handleDrop(props, monitor, Component);
+    expect(result).toBeUndefined();
+    expect(Component.setState).not.toHaveBeenCalled();
   });
 
-  it('allows label and description to be set', () => {
-    render(<ScheduleQueryButton {...defaultProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
-
-    const labelInput = screen.getByLabelText('Label');
-    const descriptionInput = screen.getByLabelText('Description');
-
-    fireEvent.change(labelInput, { target: { value: 'My Label' } });
-    fireEvent.change(descriptionInput, { target: { value: 'My Description' } });
-
-    expect(labelInput).toHaveValue('My Label');
-    expect(descriptionInput).toHaveValue('My Description');
+  it('should return undefined if dropPosition is DROP_FORBIDDEN', () => {
+    getDropPosition.mockReturnValue(DROP_FORBIDDEN);
+    const result = handleDrop(props, monitor, Component);
+    expect(result).toBeUndefined();
+    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
   });
 
-  it('calls onSchedule with the correct data on submit', async () => {
-    const mockOnSchedule = jest.fn();
-    render(<ScheduleQueryButton {...defaultProps} onSchedule={mockOnSchedule} />);
-    fireEvent.click(screen.getByText('Schedule'));
-
-    // Set values in the form
-    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'New Label' } });
-    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'New Description' } });
-
-    // Submit the form
-    fireEvent.click(screen.getByText('Submit'));
-
-    await waitFor(() => {
-      expect(mockOnSchedule).toHaveBeenCalledWith({
-        label: 'New Label',
-        description: 'New Description',
-        db_id: 1,
-        schema: 'public',
-        sql: 'SELECT * FROM table',
-        extra_json: JSON.stringify({ schedule_info: {} }),
-      });
+  it('should handle drop and append item as a child', () => {
+    getDropPosition.mockReturnValue('VALID_POSITION');
+    monitor.getItem.mockReturnValue({
+      id: 'dragging-item',
+      parentId: 'parent-id',
+      parentType: 'PARENT_TYPE',
+      index: 1,
+      type: 'DRAGGABLE_TYPE',
+      meta: {},
     });
+
+    Component.props.dropToChild = true;
+
+    const result = handleDrop(props, monitor, Component);
+
+    expect(result).toEqual({
+      source: {
+        id: 'parent-id',
+        type: 'PARENT_TYPE',
+        index: 1,
+      },
+      dragging: {
+        id: 'dragging-item',
+        type: 'DRAGGABLE_TYPE',
+        meta: {},
+      },
+      destination: {
+        id: 'component-1',
+        type: 'COMPONENT_TYPE',
+        index: 0,
+      },
+    });
+    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
+    expect(Component.props.onDrop).toHaveBeenCalledWith(result);
+    expect(clearDropCache).toHaveBeenCalled();
   });
 
-  it('displays the schedule query warning', () => {
-    render(<ScheduleQueryButton {...defaultProps} />);
-    fireEvent.click(screen.getByText('Schedule'));
+  it('should handle drop and set the destination index based on the parent component', () => {
+    getDropPosition.mockReturnValue('VALID_POSITION');
+    monitor.getItem.mockReturnValue({
+      id: 'dragging-item',
+      parentId: 'parent-id',
+      parentType: 'PARENT_TYPE',
+      index: 1,
+      type: 'DRAGGABLE_TYPE',
+      meta: {},
+    });
 
-    expect(screen.getByText('Test Warning')).toBeInTheDocument();
+    Component.props.parentComponent = {
+      id: 'parent-component-id',
+      type: 'PARENT_COMPONENT_TYPE',
+    };
+    Component.props.index = 2;
+
+    const result = handleDrop(props, monitor, Component);
+
+    expect(result).toEqual({
+      source: {
+        id: 'parent-id',
+        type: 'PARENT_TYPE',
+        index: 1,
+      },
+      dragging: {
+        id: 'dragging-item',
+        type: 'DRAGGABLE_TYPE',
+        meta: {},
+      },
+      destination: {
+        id: 'parent-component-id',
+        type: 'PARENT_COMPONENT_TYPE',
+        index: 2,
+      },
+    });
+    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
+    expect(Component.props.onDrop).toHaveBeenCalledWith(result);
+    expect(clearDropCache).toHaveBeenCalled();
   });
 
-  it('renders the button as disabled when the disabled prop is true', () => {
-    render(<ScheduleQueryButton {...defaultProps} disabled />);
-    const scheduleButton = screen.getByText('Schedule');
-    expect(scheduleButton).toBeDisabled();
+  it('should adjust the destination index when moving within the same parent and with a lower index', () => {
+    getDropPosition.mockReturnValue('VALID_POSITION');
+    monitor.getItem.mockReturnValue({
+      id: 'dragging-item',
+      parentId: 'parent-id',
+      parentType: 'PARENT_TYPE',
+      index: 1,
+      type: 'DRAGGABLE_TYPE',
+      meta: {},
+    });
+
+    Component.props.parentComponent = {
+      id: 'parent-id',
+      type: 'PARENT_COMPONENT_TYPE',
+    };
+    Component.props.index = 2;
+
+    const result = handleDrop(props, monitor, Component);
+
+    expect(result).toEqual({
+      source: {
+        id: 'parent-id',
+        type: 'PARENT_TYPE',
+        index: 1,
+      },
+      dragging: {
+        id: 'dragging-item',
+        type: 'DRAGGABLE_TYPE',
+        meta: {},
+      },
+      destination: {
+        id: 'parent-id',
+        type: 'PARENT_COMPONENT_TYPE',
+        index: 2,
+      },
+    });
+    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
+    expect(Component.props.onDrop).toHaveBeenCalledWith(result);
+    expect(clearDropCache).toHaveBeenCalled();
   });
 
-  it('does not open the modal when the button is disabled', () => {
-    render(<ScheduleQueryButton {...defaultProps} disabled />);
-    const scheduleButton = screen.getByText('Schedule');
-    fireEvent.click(scheduleButton);
-    expect(screen.queryByText('Schedule query')).not.toBeInTheDocument();
+  it('should return undefined if dropPosition is not valid', () => {
+    getDropPosition.mockReturnValue(null);
+    const result = handleDrop(props, monitor, Component);
+    expect(result).toBeUndefined();
+    expect(clearDropCache).not.toHaveBeenCalled();
+    expect(Component.props.onDrop).not.toHaveBeenCalled();
   });
 });
