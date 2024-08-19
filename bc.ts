@@ -1,90 +1,106 @@
-import throttle from 'lodash/throttle';
-import handleHover from './handleHover';
-import getDropPosition from 'src/dashboard/util/getDropPosition';
-import handleScroll from './handleScroll';
-import { DASHBOARD_ROOT_TYPE } from 'src/dashboard/util/componentTypes';
+import React from 'react';
+ import PropTypes from 'prop-types';
+ import { Row, Col, AntdInput, AntdSwitch, AntdCheckbox } from 'src/components';
+ import { Form, FormItem } from 'src/components/Form';
+ import Button from 'src/components/Button';
+ import {
+   styled,
+   t,
+ } from '@superset-ui/core';
+ 
+ import Modal from 'src/components/Modal';
+ import withToasts from 'src/components/MessageToasts/withToasts';
+ 
 
-jest.mock('lodash/throttle', () => jest.fn(fn => fn));
-jest.mock('src/dashboard/util/getDropPosition', () => jest.fn());
-jest.mock('./handleScroll', () => jest.fn());
 
-describe('handleHover', () => {
-  let monitor, Component, props;
+ class FilterNewScheme extends React.PureComponent {
+   constructor(props) {
+     super(props);
+     this.state = {
+         filterVal : {
+            name: '',
+            public: false,
+            default: false
+         }
+     };
+   }
 
-  beforeEach(() => {
-    monitor = {};
+   onChange = (e, type) => {
+    let filterVal = {...this.state.filterVal}
+    if (type === 'name') {
+        filterVal[type] = e.target.value;
+    } else if (type === 'public') {
+        filterVal[type] = e;
+    } else {
+        filterVal[type] = e.target?.checked;
+    }
+    this.setState({filterVal});
+   }
 
-    Component = {
-      mounted: true,
-      setState: jest.fn(),
-      props: {
-        component: {
-          type: 'NON_ROOT_TYPE',
-        },
-        onHover: jest.fn(),
-      },
-    };
-
-    props = {};
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should do nothing if the component is not mounted', () => {
-    Component.mounted = false;
-    handleHover(props, monitor, Component);
-    expect(Component.setState).not.toHaveBeenCalled();
-    expect(getDropPosition).not.toHaveBeenCalled();
-  });
-
-  it('should set dropIndicator to null if dropPosition is invalid', () => {
-    getDropPosition.mockReturnValue(null);
-    handleHover(props, monitor, Component);
-    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
-    expect(handleScroll).not.toHaveBeenCalled();
-  });
-
-  it('should handle hover when dropPosition is valid', () => {
-    const dropPosition = 'valid-position';
-    getDropPosition.mockReturnValue(dropPosition);
-
-    handleHover(props, monitor, Component);
-
-    expect(getDropPosition).toHaveBeenCalledWith(monitor, Component);
-    expect(Component.setState).toHaveBeenCalledWith({
-      dropIndicator: dropPosition,
-    });
-    expect(Component.props.onHover).toHaveBeenCalled();
-  });
-
-  it('should handle scroll when the component is dashboard root', () => {
-    const dropPosition = 'valid-position';
-    getDropPosition.mockReturnValue(dropPosition);
-    Component.props.component.type = DASHBOARD_ROOT_TYPE;
-
-    handleHover(props, monitor, Component);
-
-    expect(handleScroll).toHaveBeenCalledWith('SCROLL_TOP');
-    expect(Component.setState).toHaveBeenCalledWith({
-      dropIndicator: dropPosition,
-    });
-  });
-
-  it('should not handle scroll when the component is not dashboard root', () => {
-    const dropPosition = 'valid-position';
-    getDropPosition.mockReturnValue(dropPosition);
-
-    handleHover(props, monitor, Component);
-
-    expect(handleScroll).not.toHaveBeenCalled();
-    expect(Component.setState).toHaveBeenCalledWith({
-      dropIndicator: dropPosition,
-    });
-  });
-
-  it('should throttle the hover handler', () => {
-    expect(throttle).toHaveBeenCalledWith(expect.any(Function), 100);
-  });
-});
+   render() {
+     return (
+       <Modal
+         show={this.props.show}
+         onHide={this.props.onHide}
+         title={t('Save Filter Scheme')}
+         width="35%"
+         footer={
+           <>
+             <Button
+               htmlType="button"
+               buttonSize="small"
+               onClick={this.props.onHide}
+               data-test="properties-modal-cancel-button"
+             >
+               {t('Cancel')}
+             </Button>
+             <Button
+               onClick={() => this.props.preparePayloadFilter(this.state.filterVal)}
+               buttonSize="small"
+               buttonStyle="primary"
+               className="m-r-5"
+             >
+               {t('Save')}
+             </Button>
+           </>
+         }
+         responsive
+       >
+         <Form
+           data-test="dashboard-edit-properties-form"
+        //    onSubmit={this.props.preparePayloadFilter(this.state.filterVal)}
+           layout="vertical"
+         >
+           {/* <Row>
+             <Col xs={24} md={24}>
+               <h3>{t('Save Filter Scheme')}</h3>
+             </Col>
+           </Row> */}
+           <Row gutter={16}>
+             <Col xs={24} md={24}>
+               <FormItem label={t('Filter Name')}>
+                 <AntdInput
+                   data-test="dashboard-title-input"
+                   name="name"
+                   type="text"
+                   value={this.state?.filterVal?.name || ''}
+                   onChange={(e) => this.onChange(e, 'name')}
+                 />
+               </FormItem>
+             </Col>
+           </Row>
+           <Row gutter={16}>
+             <Col xs={24} md={24}>
+               <FormItem label={t('Make as Default Filter Scheme')}>
+               <AntdCheckbox style={{}} checked={this.state?.filterVal?.default === false ? false : true} onChange={(e) => this.onChange(e, 'default')} />
+               </FormItem>
+             </Col>
+           </Row>
+         </Form>
+       </Modal>
+     );
+   }
+ }
+ 
+ 
+ export default withToasts(FilterNewScheme);
