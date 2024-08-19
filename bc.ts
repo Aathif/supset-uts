@@ -1,69 +1,92 @@
-import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
-import FilterNewScheme from './FilterNewScheme';
-import withToasts from 'src/components/MessageToasts/withToasts';
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import { TAB_TYPE, DASHBOARD_GRID_TYPE } from '../componentTypes';
+import { DASHBOARD_ROOT_ID } from '../constants';
+import findNonTabChildChartIds from './findNonTabChildChartIds';
 
-// Mock the `withToasts` HOC to simplify testing
-jest.mock('src/components/MessageToasts/withToasts', () => (component) => component);
+// This function traverses the layout to identify top grid + tab level components
+// for which we track load times
+function findTopLevelComponentIds(layout) {
+  const topLevelNodes = [];
 
-describe('FilterNewScheme', () => {
-  const defaultProps = {
-    show: true,
-    onHide: jest.fn(),
-    preparePayloadFilter: jest.fn(),
-  };
+  function recurseFromNode({
+    node,
+    index = null,
+    depth,
+    parentType = null,
+    parentId = null,
+  }) {
+    if (!node) return;
 
-  const renderComponent = (props = {}) =>
-    render(<FilterNewScheme {...defaultProps} {...props} />);
+    let nextParentType = parentType;
+    let nextParentId = parentId;
+    let nextDepth = depth;
+    if (node.type === TAB_TYPE || node.type === DASHBOARD_GRID_TYPE) {
+      const chartIds = findNonTabChildChartIds({
+        layout,
+        id: node.id,
+      });
 
-  it('should render without crashing', () => {
-    const { getByText } = renderComponent();
-    expect(getByText('Save Filter Scheme')).toBeInTheDocument();
+      topLevelNodes.push({
+        id: node.id,
+        type: node.type,
+        parent_type: parentType,
+        parent_id: parentId,
+        index,
+        depth,
+        slice_ids: chartIds,
+      });
+
+      nextParentId = node.id;
+      nextParentType = node.type;
+      nextDepth += 1;
+    }
+    if (node.children && node.children.length) {
+      node.children.forEach((childId, childIndex) => {
+        recurseFromNode({
+          node: layout[childId],
+          index: childIndex,
+          parentType: nextParentType,
+          parentId: nextParentId,
+          depth: nextDepth,
+        });
+      });
+    }
+  }
+
+  recurseFromNode({
+    node: layout[DASHBOARD_ROOT_ID],
+    depth: 0,
   });
 
-  it('should update state when input value changes', () => {
-    const { getByLabelText } = renderComponent();
+  return topLevelNodes;
+}
 
-    const filterNameInput = getByLabelText('Filter Name');
-    fireEvent.change(filterNameInput, { target: { value: 'Test Filter' } });
+// This method is called frequently, so cache results
+let cachedLayout;
+let cachedTopLevelNodes;
+export default function findTopLevelComponentIdsWithCache(layout) {
+  if (layout === cachedLayout) {
+    return cachedTopLevelNodes;
+  }
+  cachedLayout = layout;
+  cachedTopLevelNodes = findTopLevelComponentIds(layout);
 
-    expect(filterNameInput.value).toBe('Test Filter');
-  });
-
-  it('should update state when checkbox is toggled', () => {
-    const { getByLabelText } = renderComponent();
-
-    const defaultCheckbox = getByLabelText('Make as Default Filter Scheme');
-    fireEvent.click(defaultCheckbox);
-
-    expect(defaultCheckbox.checked).toBe(true);
-
-    fireEvent.click(defaultCheckbox);
-    expect(defaultCheckbox.checked).toBe(false);
-  });
-
-  it('should call onHide when cancel button is clicked', () => {
-    const { getByText } = renderComponent();
-
-    const cancelButton = getByText('Cancel');
-    fireEvent.click(cancelButton);
-
-    expect(defaultProps.onHide).toHaveBeenCalled();
-  });
-
-  it('should call preparePayloadFilter with the correct data when save button is clicked', () => {
-    const { getByText, getByLabelText } = renderComponent();
-
-    const filterNameInput = getByLabelText('Filter Name');
-    fireEvent.change(filterNameInput, { target: { value: 'Test Filter' } });
-
-    const saveButton = getByText('Save');
-    fireEvent.click(saveButton);
-
-    expect(defaultProps.preparePayloadFilter).toHaveBeenCalledWith({
-      name: 'Test Filter',
-      public: false,
-      default: false,
-    });
-  });
-});
+  return cachedTopLevelNodes;
+}
