@@ -1,119 +1,178 @@
-import transformProps from './transformProps';
-import supercluster from 'supercluster';
-import { DEFAULT_POINT_RADIUS, DEFAULT_MAX_ZOOM } from './MapBox';
+import React from 'react';
+import { render } from '@testing-library/react';
+import ScatterPlotGlowOverlay from './ScatterPlotGlowOverlay';
+import { CanvasOverlay } from 'react-map-gl';
+import roundDecimal from './utils/roundDecimal';
+import luminanceFromRGB from './utils/luminanceFromRGB';
 
-jest.mock('supercluster');
+jest.mock('react-map-gl', () => ({
+  CanvasOverlay: jest.fn(({ redraw }) => {
+    redraw({
+      width: 100,
+      height: 100,
+      ctx: {
+        clearRect: jest.fn(),
+        beginPath: jest.fn(),
+        arc: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        measureText: jest.fn().mockReturnValue({ width: 10 }),
+        createRadialGradient: jest.fn().mockReturnValue({
+          addColorStop: jest.fn(),
+        }),
+      },
+      project: jest.fn(lngLat => [lngLat[0] * 10, lngLat[1] * 10]),
+      isDragging: false,
+    });
+    return <div>MockCanvasOverlay</div>;
+  }),
+}));
 
-describe('transformProps', () => {
-  const defaultChartProps = {
-    width: 800,
-    height: 600,
-    formData: {
-      clusteringRadius: 40,
-      globalOpacity: 0.8,
-      mapboxColor: 'rgb(255, 0, 0)',
-      mapboxStyle: 'mapbox://styles/mapbox/light-v10',
-      pandasAggfunc: 'sum',
-      pointRadius: 'Auto',
-      pointRadiusUnit: 'Pixels',
-      renderWhileDragging: true,
-    },
-    hooks: {
-      onError: jest.fn(),
-      setControlValue: jest.fn(),
-    },
-    queriesData: [
+jest.mock('./utils/roundDecimal');
+jest.mock('./utils/luminanceFromRGB');
+
+describe('ScatterPlotGlowOverlay', () => {
+  const defaultProps = {
+    aggregation: 'sum',
+    compositeOperation: 'source-over',
+    dotRadius: 10,
+    lngLatAccessor: location => [location[0], location[1]],
+    locations: [
       {
-        data: {
-          bounds: [[-73.9876, 40.7661], [-73.9397, 40.8002]],
-          geoJSON: {
-            type: 'FeatureCollection',
-            features: [],
-          },
-          hasCustomMetric: false,
-          mapboxApiKey: 'your-mapbox-api-key',
+        properties: {
+          cluster: true,
+          point_count: 5,
+          sum: 10,
+        },
+        geometry: {
+          coordinates: [10, 20],
+        },
+      },
+      {
+        properties: {
+          cluster: false,
+          metric: 3,
+        },
+        geometry: {
+          coordinates: [30, 40],
         },
       },
     ],
+    pointRadiusUnit: 'Pixels',
+    renderWhileDragging: true,
+    rgb: [255, 0, 0],
+    zoom: 10,
   };
 
   beforeEach(() => {
-    supercluster.mockClear();
+    roundDecimal.mockImplementation((value) => value);
+    luminanceFromRGB.mockImplementation(() => 100);
   });
 
-  test('returns expected props when valid inputs are provided', () => {
-    const result = transformProps(defaultChartProps);
-
-    expect(result.width).toBe(800);
-    expect(result.height).toBe(600);
-    expect(result.aggregatorName).toBe('sum');
-    expect(result.bounds).toEqual([[-73.9876, 40.7661], [-73.9397, 40.8002]]);
-    expect(result.globalOpacity).toBe(0.8);
-    expect(result.hasCustomMetric).toBe(false);
-    expect(result.mapboxApiKey).toBe('your-mapbox-api-key');
-    expect(result.mapStyle).toBe('mapbox://styles/mapbox/light-v10');
-    expect(result.pointRadius).toBe(DEFAULT_POINT_RADIUS);
-    expect(result.pointRadiusUnit).toBe('Pixels');
-    expect(result.renderWhileDragging).toBe(true);
-    expect(result.rgb).toEqual(['255', '0', '0']);
+  test('renders without crashing', () => {
+    const { container } = render(<ScatterPlotGlowOverlay {...defaultProps} />);
+    expect(container).toHaveTextContent('MockCanvasOverlay');
   });
 
-  test('calls onError when mapboxColor is invalid', () => {
-    const chartProps = {
-      ...defaultChartProps,
-      formData: {
-        ...defaultChartProps.formData,
-        mapboxColor: 'invalid-color',
-      },
+  test('calls redraw with correct arguments', () => {
+    render(<ScatterPlotGlowOverlay {...defaultProps} />);
+
+    expect(CanvasOverlay).toHaveBeenCalled();
+    const args = CanvasOverlay.mock.calls[0][0];
+    const redrawFn = args.redraw;
+
+    const mockContext = {
+      clearRect: jest.fn(),
+      beginPath: jest.fn(),
+      arc: jest.fn(),
+      fill: jest.fn(),
+      fillText: jest.fn(),
+      measureText: jest.fn().mockReturnValue({ width: 10 }),
+      createRadialGradient: jest.fn().mockReturnValue({
+        addColorStop: jest.fn(),
+      }),
     };
 
-    const result = transformProps(chartProps);
-    expect(chartProps.hooks.onError).toHaveBeenCalledWith("Color field must be of form 'rgb(%d, %d, %d)'");
-    expect(result).toEqual({});
-  });
+    const mockProject = jest.fn(lngLat => [lngLat[0] * 10, lngLat[1] * 10]);
 
-  test('returns custom metric settings when hasCustomMetric is true', () => {
-    const chartProps = {
-      ...defaultChartProps,
-      queriesData: [
-        {
-          data: {
-            ...defaultChartProps.queriesData[0].data,
-            hasCustomMetric: true,
-          },
-        },
-      ],
-    };
-
-    const result = transformProps(chartProps);
-
-    expect(result.clusterer).toBeDefined();
-    expect(supercluster).toHaveBeenCalledWith({
-      maxZoom: DEFAULT_MAX_ZOOM,
-      radius: 40,
-      initial: expect.any(Function),
-      map: expect.any(Function),
-      reduce: expect.any(Function),
+    redrawFn({
+      width: 100,
+      height: 100,
+      ctx: mockContext,
+      isDragging: false,
+      project: mockProject,
     });
+
+    // Check that the drawing functions were called correctly
+    expect(mockContext.clearRect).toHaveBeenCalledWith(0, 0, 100, 100);
+    expect(mockContext.beginPath).toHaveBeenCalled();
+    expect(mockContext.arc).toHaveBeenCalled();
+    expect(mockContext.fill).toHaveBeenCalled();
   });
 
-  test('returns pointRadius as specified when not "Auto"', () => {
-    const chartProps = {
-      ...defaultChartProps,
-      formData: {
-        ...defaultChartProps.formData,
-        pointRadius: 15,
-      },
+  test('computes cluster label correctly based on aggregation', () => {
+    const modifiedProps = {
+      ...defaultProps,
+      aggregation: 'mean',
+    };
+    render(<ScatterPlotGlowOverlay {...modifiedProps} />);
+
+    expect(CanvasOverlay).toHaveBeenCalled();
+    const args = CanvasOverlay.mock.calls[0][0];
+    const redrawFn = args.redraw;
+
+    const mockContext = {
+      clearRect: jest.fn(),
+      beginPath: jest.fn(),
+      arc: jest.fn(),
+      fill: jest.fn(),
+      fillText: jest.fn(),
+      measureText: jest.fn().mockReturnValue({ width: 10 }),
+      createRadialGradient: jest.fn().mockReturnValue({
+        addColorStop: jest.fn(),
+      }),
     };
 
-    const result = transformProps(chartProps);
-    expect(result.pointRadius).toBe(15);
+    redrawFn({
+      width: 100,
+      height: 100,
+      ctx: mockContext,
+      isDragging: false,
+      project: jest.fn(lngLat => [lngLat[0] * 10, lngLat[1] * 10]),
+    });
+
+    // Check that the cluster label computation works as expected
+    expect(mockContext.fillText).toHaveBeenCalledWith(2, 100, 200);
   });
 
-  test('handles onViewportChange and calls setControlValue', () => {
-    const result = transformProps(defaultChartProps);
-    const onViewportChange = result.onViewportChange;
+  test('draws text correctly based on luminance', () => {
+    render(<ScatterPlotGlowOverlay {...defaultProps} />);
 
-    onViewportChange({ latitude: 40.7128, longitude: -74.0060, zoom: 12 });
+    expect(CanvasOverlay).toHaveBeenCalled();
+    const args = CanvasOverlay.mock.calls[0][0];
+    const redrawFn = args.redraw;
 
-    expect(defaultChartProps.hooks.setControlValue
+    const mockContext = {
+      clearRect: jest.fn(),
+      beginPath: jest.fn(),
+      arc: jest.fn(),
+      fill: jest.fn(),
+      fillText: jest.fn(),
+      measureText: jest.fn().mockReturnValue({ width: 10 }),
+      createRadialGradient: jest.fn().mockReturnValue({
+        addColorStop: jest.fn(),
+      }),
+    };
+
+    redrawFn({
+      width: 100,
+      height: 100,
+      ctx: mockContext,
+      isDragging: false,
+      project: jest.fn(lngLat => [lngLat[0] * 10, lngLat[1] * 10]),
+    });
+
+    expect(mockContext.fillText).toHaveBeenCalledWith(5, 100, 200);
+    expect(mockContext.fillStyle).toBe('black'); // Based on luminanceFromRGB mock
+  });
+});
