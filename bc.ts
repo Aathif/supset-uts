@@ -1,65 +1,119 @@
-import React from 'react';
-import { render } from '@testing-library/react';
-import Calendar from './Calendar';
-import '@testing-library/jest-dom/extend-expect';
+import transformProps from './transformProps';
+import supercluster from 'supercluster';
+import { DEFAULT_POINT_RADIUS, DEFAULT_MAX_ZOOM } from './MapBox';
 
-describe('Calendar Component', () => {
-  const defaultProps = {
-    data: {
-      data: {
-        metric1: { 1535034236.0: 3, 1535034237.0: 5 },
-      },
-      domain: 'month',
-      range: 12,
-      start: Date.now(),
-      subdomain: 'day',
+jest.mock('supercluster');
+
+describe('transformProps', () => {
+  const defaultChartProps = {
+    width: 800,
+    height: 600,
+    formData: {
+      clusteringRadius: 40,
+      globalOpacity: 0.8,
+      mapboxColor: 'rgb(255, 0, 0)',
+      mapboxStyle: 'mapbox://styles/mapbox/light-v10',
+      pandasAggfunc: 'sum',
+      pointRadius: 'Auto',
+      pointRadiusUnit: 'Pixels',
+      renderWhileDragging: true,
     },
-    height: 500,
-    cellPadding: 3,
-    cellRadius: 0,
-    cellSize: 10,
-    linearColorScheme: 'schemeBlues',
-    showLegend: true,
-    showMetricName: true,
-    showValues: true,
-    steps: 5,
-    timeFormatter: value => value,
-    valueFormatter: value => value,
-    verboseMap: { metric1: 'Metric 1' },
-    theme: { colors: { grayscale: { light5: '#ccc' } } },
+    hooks: {
+      onError: jest.fn(),
+      setControlValue: jest.fn(),
+    },
+    queriesData: [
+      {
+        data: {
+          bounds: [[-73.9876, 40.7661], [-73.9397, 40.8002]],
+          geoJSON: {
+            type: 'FeatureCollection',
+            features: [],
+          },
+          hasCustomMetric: false,
+          mapboxApiKey: 'your-mapbox-api-key',
+        },
+      },
+    ],
   };
 
-  test('renders the Calendar component with default props', () => {
-    const { container } = render(<Calendar {...defaultProps} />);
-    expect(container).toBeInTheDocument();
-    expect(container.querySelector('.superset-legacy-chart-calendar')).toBeInTheDocument();
+  beforeEach(() => {
+    supercluster.mockClear();
   });
 
-  test('renders metric name when showMetricName is true', () => {
-    const { getByText } = render(<Calendar {...defaultProps} />);
-    expect(getByText('Metric: Metric 1')).toBeInTheDocument();
+  test('returns expected props when valid inputs are provided', () => {
+    const result = transformProps(defaultChartProps);
+
+    expect(result.width).toBe(800);
+    expect(result.height).toBe(600);
+    expect(result.aggregatorName).toBe('sum');
+    expect(result.bounds).toEqual([[-73.9876, 40.7661], [-73.9397, 40.8002]]);
+    expect(result.globalOpacity).toBe(0.8);
+    expect(result.hasCustomMetric).toBe(false);
+    expect(result.mapboxApiKey).toBe('your-mapbox-api-key');
+    expect(result.mapStyle).toBe('mapbox://styles/mapbox/light-v10');
+    expect(result.pointRadius).toBe(DEFAULT_POINT_RADIUS);
+    expect(result.pointRadiusUnit).toBe('Pixels');
+    expect(result.renderWhileDragging).toBe(true);
+    expect(result.rgb).toEqual(['255', '0', '0']);
   });
 
-  test('does not render metric name when showMetricName is false', () => {
-    const { queryByText } = render(
-      <Calendar {...defaultProps} showMetricName={false} />
-    );
-    expect(queryByText('Metric: Metric 1')).not.toBeInTheDocument();
+  test('calls onError when mapboxColor is invalid', () => {
+    const chartProps = {
+      ...defaultChartProps,
+      formData: {
+        ...defaultChartProps.formData,
+        mapboxColor: 'invalid-color',
+      },
+    };
+
+    const result = transformProps(chartProps);
+    expect(chartProps.hooks.onError).toHaveBeenCalledWith("Color field must be of form 'rgb(%d, %d, %d)'");
+    expect(result).toEqual({});
   });
 
-  test('renders the correct number of cells based on data', () => {
-    const { container } = render(<Calendar {...defaultProps} />);
-    // Check if the expected number of cells are rendered
-    expect(container.querySelectorAll('.cal-heatmap-container .subdomain-cell').length).toBe(2);
+  test('returns custom metric settings when hasCustomMetric is true', () => {
+    const chartProps = {
+      ...defaultChartProps,
+      queriesData: [
+        {
+          data: {
+            ...defaultChartProps.queriesData[0].data,
+            hasCustomMetric: true,
+          },
+        },
+      ],
+    };
+
+    const result = transformProps(chartProps);
+
+    expect(result.clusterer).toBeDefined();
+    expect(supercluster).toHaveBeenCalledWith({
+      maxZoom: DEFAULT_MAX_ZOOM,
+      radius: 40,
+      initial: expect.any(Function),
+      map: expect.any(Function),
+      reduce: expect.any(Function),
+    });
   });
 
-  test('renders the legend when showLegend is true', () => {
-    const { container } = render(<Calendar {...defaultProps} showLegend={true} />);
-    expect(container.querySelector('.cal-heatmap-container .legend')).toBeInTheDocument();
+  test('returns pointRadius as specified when not "Auto"', () => {
+    const chartProps = {
+      ...defaultChartProps,
+      formData: {
+        ...defaultChartProps.formData,
+        pointRadius: 15,
+      },
+    };
+
+    const result = transformProps(chartProps);
+    expect(result.pointRadius).toBe(15);
   });
 
-  test('does not render the legend when showLegend is false', () => {
-    const { container } = render(<Calendar {...defaultProps} showLegend={false} />);
-    expect(container.querySelector('.cal-heatmap-container .legend')).not.toBeInTheDocument();
-  });
-});
+  test('handles onViewportChange and calls setControlValue', () => {
+    const result = transformProps(defaultChartProps);
+    const onViewportChange = result.onViewportChange;
+
+    onViewportChange({ latitude: 40.7128, longitude: -74.0060, zoom: 12 });
+
+    expect(defaultChartProps.hooks.setControlValue
