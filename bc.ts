@@ -1,93 +1,120 @@
-import findTopLevelComponentIdsWithCache from './path/to/your/module';
-import { TAB_TYPE, DASHBOARD_GRID_TYPE } from '../componentTypes';
-import { DASHBOARD_ROOT_ID } from '../constants';
+import getLoadStatsPerTopLevelComponent from './getLoadStatsPerTopLevelComponent';
+import findTopLevelComponentIds from './findTopLevelComponentIds';
+import childChartsDidLoad from './childChartsDidLoad';
 
-jest.mock('./findNonTabChildChartIds', () => jest.fn(() => [1, 2, 3]));
+jest.mock('./findTopLevelComponentIds');
+jest.mock('./childChartsDidLoad');
 
-describe('findTopLevelComponentIdsWithCache', () => {
+describe('getLoadStatsPerTopLevelComponent', () => {
   const mockLayout = {
-    [DASHBOARD_ROOT_ID]: { id: DASHBOARD_ROOT_ID, children: ['grid1'] },
-    grid1: { id: 'grid1', type: DASHBOARD_GRID_TYPE, children: ['tab1'] },
-    tab1: { id: 'tab1', type: TAB_TYPE, children: ['chart1', 'chart2'] },
+    root: { id: 'root', type: 'ROOT_TYPE', children: ['grid1'] },
+    grid1: { id: 'grid1', type: 'GRID_TYPE', children: ['chart1', 'chart2'] },
     chart1: { id: 'chart1', type: 'CHART' },
     chart2: { id: 'chart2', type: 'CHART' },
   };
 
-  afterEach(() => {
-    // Clear the cache after each test
-    cachedLayout = undefined;
-    cachedTopLevelNodes = undefined;
+  const mockChartQueries = {
+    chart1: { id: 'chart1', startTime: 1000 },
+    chart2: { id: 'chart2', startTime: 1500 },
+  };
+
+  beforeEach(() => {
+    findTopLevelComponentIds.mockReturnValue([
+      { id: 'grid1', type: 'GRID_TYPE', depth: 0 },
+    ]);
+
+    childChartsDidLoad.mockReturnValue({
+      didLoad: true,
+      minQueryStartTime: 1000,
+    });
   });
 
-  it('should return the correct top-level component ids', () => {
-    const result = findTopLevelComponentIdsWithCache(mockLayout);
-    expect(result).toEqual([
-      {
+  it('should return correct load stats for top-level components', () => {
+    const result = getLoadStatsPerTopLevelComponent({
+      layout: mockLayout,
+      chartQueries: mockChartQueries,
+    });
+
+    expect(result).toEqual({
+      grid1: {
+        didLoad: true,
         id: 'grid1',
-        type: DASHBOARD_GRID_TYPE,
-        parent_type: null,
-        parent_id: null,
-        index: 0,
+        minQueryStartTime: 1000,
+        type: 'GRID_TYPE',
         depth: 0,
-        slice_ids: [1, 2, 3], // Assuming findNonTabChildChartIds is mocked
       },
-      {
+    });
+  });
+
+  it('should return empty stats if no top-level components are found', () => {
+    findTopLevelComponentIds.mockReturnValueOnce([]);
+
+    const result = getLoadStatsPerTopLevelComponent({
+      layout: mockLayout,
+      chartQueries: mockChartQueries,
+    });
+
+    expect(result).toEqual({});
+  });
+
+  it('should correctly handle different child chart load states', () => {
+    childChartsDidLoad.mockReturnValueOnce({
+      didLoad: false,
+      minQueryStartTime: null,
+    });
+
+    const result = getLoadStatsPerTopLevelComponent({
+      layout: mockLayout,
+      chartQueries: mockChartQueries,
+    });
+
+    expect(result).toEqual({
+      grid1: {
+        didLoad: false,
+        id: 'grid1',
+        minQueryStartTime: null,
+        type: 'GRID_TYPE',
+        depth: 0,
+      },
+    });
+  });
+
+  it('should handle layout with multiple top-level components', () => {
+    findTopLevelComponentIds.mockReturnValueOnce([
+      { id: 'grid1', type: 'GRID_TYPE', depth: 0 },
+      { id: 'tab1', type: 'TAB_TYPE', depth: 1 },
+    ]);
+
+    childChartsDidLoad.mockReturnValueOnce({
+      didLoad: true,
+      minQueryStartTime: 1000,
+    });
+
+    childChartsDidLoad.mockReturnValueOnce({
+      didLoad: true,
+      minQueryStartTime: 1200,
+    });
+
+    const result = getLoadStatsPerTopLevelComponent({
+      layout: mockLayout,
+      chartQueries: mockChartQueries,
+    });
+
+    expect(result).toEqual({
+      grid1: {
+        didLoad: true,
+        id: 'grid1',
+        minQueryStartTime: 1000,
+        type: 'GRID_TYPE',
+        depth: 0,
+      },
+      tab1: {
+        didLoad: true,
         id: 'tab1',
-        type: TAB_TYPE,
-        parent_type: DASHBOARD_GRID_TYPE,
-        parent_id: 'grid1',
-        index: 0,
+        minQueryStartTime: 1200,
+        type: 'TAB_TYPE',
         depth: 1,
-        slice_ids: [1, 2, 3], // Assuming findNonTabChildChartIds is mocked
       },
-    ]);
-  });
-
-  it('should return cached result for the same layout', () => {
-    const firstResult = findTopLevelComponentIdsWithCache(mockLayout);
-    const secondResult = findTopLevelComponentIdsWithCache(mockLayout);
-
-    // Ensure the result is the same
-    expect(firstResult).toEqual(secondResult);
-
-    // Ensure the result is coming from cache
-    expect(firstResult).toBe(secondResult);
-  });
-
-  it('should update cache when layout changes', () => {
-    const firstResult = findTopLevelComponentIdsWithCache(mockLayout);
-
-    const newLayout = {
-      ...mockLayout,
-      grid1: { ...mockLayout.grid1, children: ['tab2'] },
-      tab2: { id: 'tab2', type: TAB_TYPE, children: [] },
-    };
-
-    const secondResult = findTopLevelComponentIdsWithCache(newLayout);
-
-    // Ensure the result is different after layout changes
-    expect(firstResult).not.toBe(secondResult);
-
-    // Validate the new result
-    expect(secondResult).toEqual([
-      {
-        id: 'grid1',
-        type: DASHBOARD_GRID_TYPE,
-        parent_type: null,
-        parent_id: null,
-        index: 0,
-        depth: 0,
-        slice_ids: [1, 2, 3], // Assuming findNonTabChildChartIds is mocked
-      },
-      {
-        id: 'tab2',
-        type: TAB_TYPE,
-        parent_type: DASHBOARD_GRID_TYPE,
-        parent_id: 'grid1',
-        index: 0,
-        depth: 1,
-        slice_ids: [1, 2, 3], // Assuming findNonTabChildChartIds is mocked
-      },
-    ]);
+    });
   });
 });
