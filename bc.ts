@@ -1,37 +1,27 @@
-import handleDrop from './handleDrop';
-import getDropPosition, {
-  clearDropCache,
-  DROP_FORBIDDEN,
-} from '../../util/getDropPosition';
+import throttle from 'lodash/throttle';
+import handleHover from './handleHover';
+import getDropPosition from 'src/dashboard/util/getDropPosition';
+import handleScroll from './handleScroll';
+import { DASHBOARD_ROOT_TYPE } from 'src/dashboard/util/componentTypes';
 
-jest.mock('../../util/getDropPosition', () => ({
-  __esModule: true,
-  default: jest.fn(),
-  clearDropCache: jest.fn(),
-  DROP_FORBIDDEN: 'DROP_FORBIDDEN',
-}));
+jest.mock('lodash/throttle', () => jest.fn(fn => fn));
+jest.mock('src/dashboard/util/getDropPosition', () => jest.fn());
+jest.mock('./handleScroll', () => jest.fn());
 
-describe('handleDrop', () => {
+describe('handleHover', () => {
   let monitor, Component, props;
 
   beforeEach(() => {
-    monitor = {
-      getItem: jest.fn(),
-    };
+    monitor = {};
 
     Component = {
       mounted: true,
       setState: jest.fn(),
       props: {
-        parentComponent: null,
         component: {
-          id: 'component-1',
-          type: 'COMPONENT_TYPE',
-          children: [],
+          type: 'NON_ROOT_TYPE',
         },
-        index: 0,
-        onDrop: jest.fn(),
-        dropToChild: false,
+        onHover: jest.fn(),
       },
     };
 
@@ -42,144 +32,59 @@ describe('handleDrop', () => {
     jest.clearAllMocks();
   });
 
-  it('should return undefined if the component is not mounted', () => {
+  it('should do nothing if the component is not mounted', () => {
     Component.mounted = false;
-    const result = handleDrop(props, monitor, Component);
-    expect(result).toBeUndefined();
+    handleHover(props, monitor, Component);
     expect(Component.setState).not.toHaveBeenCalled();
+    expect(getDropPosition).not.toHaveBeenCalled();
   });
 
-  it('should return undefined if dropPosition is DROP_FORBIDDEN', () => {
-    getDropPosition.mockReturnValue(DROP_FORBIDDEN);
-    const result = handleDrop(props, monitor, Component);
-    expect(result).toBeUndefined();
-    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
-  });
-
-  it('should handle drop and append item as a child', () => {
-    getDropPosition.mockReturnValue('VALID_POSITION');
-    monitor.getItem.mockReturnValue({
-      id: 'dragging-item',
-      parentId: 'parent-id',
-      parentType: 'PARENT_TYPE',
-      index: 1,
-      type: 'DRAGGABLE_TYPE',
-      meta: {},
-    });
-
-    Component.props.dropToChild = true;
-
-    const result = handleDrop(props, monitor, Component);
-
-    expect(result).toEqual({
-      source: {
-        id: 'parent-id',
-        type: 'PARENT_TYPE',
-        index: 1,
-      },
-      dragging: {
-        id: 'dragging-item',
-        type: 'DRAGGABLE_TYPE',
-        meta: {},
-      },
-      destination: {
-        id: 'component-1',
-        type: 'COMPONENT_TYPE',
-        index: 0,
-      },
-    });
-    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
-    expect(Component.props.onDrop).toHaveBeenCalledWith(result);
-    expect(clearDropCache).toHaveBeenCalled();
-  });
-
-  it('should handle drop and set the destination index based on the parent component', () => {
-    getDropPosition.mockReturnValue('VALID_POSITION');
-    monitor.getItem.mockReturnValue({
-      id: 'dragging-item',
-      parentId: 'parent-id',
-      parentType: 'PARENT_TYPE',
-      index: 1,
-      type: 'DRAGGABLE_TYPE',
-      meta: {},
-    });
-
-    Component.props.parentComponent = {
-      id: 'parent-component-id',
-      type: 'PARENT_COMPONENT_TYPE',
-    };
-    Component.props.index = 2;
-
-    const result = handleDrop(props, monitor, Component);
-
-    expect(result).toEqual({
-      source: {
-        id: 'parent-id',
-        type: 'PARENT_TYPE',
-        index: 1,
-      },
-      dragging: {
-        id: 'dragging-item',
-        type: 'DRAGGABLE_TYPE',
-        meta: {},
-      },
-      destination: {
-        id: 'parent-component-id',
-        type: 'PARENT_COMPONENT_TYPE',
-        index: 2,
-      },
-    });
-    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
-    expect(Component.props.onDrop).toHaveBeenCalledWith(result);
-    expect(clearDropCache).toHaveBeenCalled();
-  });
-
-  it('should adjust the destination index when moving within the same parent and with a lower index', () => {
-    getDropPosition.mockReturnValue('VALID_POSITION');
-    monitor.getItem.mockReturnValue({
-      id: 'dragging-item',
-      parentId: 'parent-id',
-      parentType: 'PARENT_TYPE',
-      index: 1,
-      type: 'DRAGGABLE_TYPE',
-      meta: {},
-    });
-
-    Component.props.parentComponent = {
-      id: 'parent-id',
-      type: 'PARENT_COMPONENT_TYPE',
-    };
-    Component.props.index = 2;
-
-    const result = handleDrop(props, monitor, Component);
-
-    expect(result).toEqual({
-      source: {
-        id: 'parent-id',
-        type: 'PARENT_TYPE',
-        index: 1,
-      },
-      dragging: {
-        id: 'dragging-item',
-        type: 'DRAGGABLE_TYPE',
-        meta: {},
-      },
-      destination: {
-        id: 'parent-id',
-        type: 'PARENT_COMPONENT_TYPE',
-        index: 2,
-      },
-    });
-    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
-    expect(Component.props.onDrop).toHaveBeenCalledWith(result);
-    expect(clearDropCache).toHaveBeenCalled();
-  });
-
-  it('should return undefined if dropPosition is not valid', () => {
+  it('should set dropIndicator to null if dropPosition is invalid', () => {
     getDropPosition.mockReturnValue(null);
-    const result = handleDrop(props, monitor, Component);
-    expect(result).toBeUndefined();
-    expect(clearDropCache).not.toHaveBeenCalled();
-    expect(Component.props.onDrop).not.toHaveBeenCalled();
+    handleHover(props, monitor, Component);
+    expect(Component.setState).toHaveBeenCalledWith({ dropIndicator: null });
+    expect(handleScroll).not.toHaveBeenCalled();
+  });
+
+  it('should handle hover when dropPosition is valid', () => {
+    const dropPosition = 'valid-position';
+    getDropPosition.mockReturnValue(dropPosition);
+
+    handleHover(props, monitor, Component);
+
+    expect(getDropPosition).toHaveBeenCalledWith(monitor, Component);
+    expect(Component.setState).toHaveBeenCalledWith({
+      dropIndicator: dropPosition,
+    });
+    expect(Component.props.onHover).toHaveBeenCalled();
+  });
+
+  it('should handle scroll when the component is dashboard root', () => {
+    const dropPosition = 'valid-position';
+    getDropPosition.mockReturnValue(dropPosition);
+    Component.props.component.type = DASHBOARD_ROOT_TYPE;
+
+    handleHover(props, monitor, Component);
+
+    expect(handleScroll).toHaveBeenCalledWith('SCROLL_TOP');
+    expect(Component.setState).toHaveBeenCalledWith({
+      dropIndicator: dropPosition,
+    });
+  });
+
+  it('should not handle scroll when the component is not dashboard root', () => {
+    const dropPosition = 'valid-position';
+    getDropPosition.mockReturnValue(dropPosition);
+
+    handleHover(props, monitor, Component);
+
+    expect(handleScroll).not.toHaveBeenCalled();
+    expect(Component.setState).toHaveBeenCalledWith({
+      dropIndicator: dropPosition,
+    });
+  });
+
+  it('should throttle the hover handler', () => {
+    expect(throttle).toHaveBeenCalledWith(expect.any(Function), 100);
   });
 });
