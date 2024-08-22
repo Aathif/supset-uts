@@ -1,52 +1,65 @@
-import { renderTooltipFactory } from './path_to_your_function';
-import { smartDateVerboseFormatter, defaultNumberFormatter } from 'somewhere_in_your_project';
-import { t } from '@superset-ui/core';
+import buildQuery from './path_to_buildQuery';
+import { buildQueryContext } from '@superset-ui/core';
 
-describe('renderTooltipFactory', () => {
-  const mockDate = '2023-08-16T00:00:00';
-  const mockFormattedDate = 'August 16, 2023';
-  const mockFormattedValue = '100.00';
-  const mockData = { data: [mockDate, 100] };
-  const mockParams = [{ data: mockData.data }];
-  
-  const customDateFormatter = jest.fn(() => mockFormattedDate);
-  const customValueFormatter = jest.fn(() => mockFormattedValue);
+jest.mock('@superset-ui/core', () => ({
+  buildQueryContext: jest.fn(),
+  ensureIsArray: jest.fn((input) => Array.isArray(input) ? input : [input]),
+}));
 
-  beforeAll(() => {
-    // Mock the translation function
-    jest.spyOn(global, 't').mockImplementation((key) => key);
+describe('buildQuery', () => {
+  const mockFormData = {
+    series_limit_metric: 'mock_metric',
+    metrics: ['metric_1', 'metric_2'],
+  };
+
+  beforeEach(() => {
+    buildQueryContext.mockClear();
   });
 
-  afterAll(() => {
-    jest.restoreAllMocks();
+  it('should build a query with orderby set to series_limit_metric', () => {
+    buildQuery(mockFormData);
+
+    expect(buildQueryContext).toHaveBeenCalledWith(mockFormData, expect.any(Function));
+
+    const queryObjectBuilder = buildQueryContext.mock.calls[0][1];
+    const baseQueryObject = { metrics: ['metric_1'], orderby: [] };
+    const queryObjects = queryObjectBuilder(baseQueryObject);
+
+    expect(queryObjects[0].orderby).toEqual([['mock_metric', false]]);
   });
 
-  it('should render tooltip with custom formatters', () => {
-    const renderTooltip = renderTooltipFactory(customDateFormatter, customValueFormatter);
-    const result = renderTooltip(mockParams);
+  it('should default to ordering by the first metric if series_limit_metric is not provided', () => {
+    const formDataWithoutSortByMetric = {
+      ...mockFormData,
+      series_limit_metric: null,
+    };
 
-    expect(customDateFormatter).toHaveBeenCalledWith(mockDate);
-    expect(customValueFormatter).toHaveBeenCalledWith(100);
-    expect(result).toContain(mockFormattedDate);
-    expect(result).toContain(mockFormattedValue);
+    buildQuery(formDataWithoutSortByMetric);
+
+    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutSortByMetric, expect.any(Function));
+
+    const queryObjectBuilder = buildQueryContext.mock.calls[0][1];
+    const baseQueryObject = { metrics: ['metric_1'], orderby: [] };
+    const queryObjects = queryObjectBuilder(baseQueryObject);
+
+    expect(queryObjects[0].orderby).toEqual([['metric_1', false]]);
   });
 
-  it('should render tooltip with default formatters', () => {
-    const renderTooltip = renderTooltipFactory();
-    const result = renderTooltip(mockParams);
+  it('should not override orderby if no metrics are provided', () => {
+    const formDataWithoutMetrics = {
+      ...mockFormData,
+      metrics: [],
+      series_limit_metric: null,
+    };
 
-    expect(result).toContain(smartDateVerboseFormatter(mockDate));
-    expect(result).toContain(defaultNumberFormatter(100));
-  });
+    buildQuery(formDataWithoutMetrics);
 
-  it('should render "N/A" when value is null', () => {
-    const mockNullData = { data: [mockDate, null] };
-    const mockNullParams = [{ data: mockNullData.data }];
-    const renderTooltip = renderTooltipFactory(customDateFormatter, customValueFormatter);
-    const result = renderTooltip(mockNullParams);
+    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutMetrics, expect.any(Function));
 
-    expect(customDateFormatter).toHaveBeenCalledWith(mockDate);
-    expect(result).toContain(mockFormattedDate);
-    expect(result).toContain(t('N/A'));
+    const queryObjectBuilder = buildQueryContext.mock.calls[0][1];
+    const baseQueryObject = { metrics: [], orderby: [['some_metric', true]] };
+    const queryObjects = queryObjectBuilder(baseQueryObject);
+
+    expect(queryObjects[0].orderby).toEqual([['some_metric', true]]);
   });
 });
