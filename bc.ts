@@ -1,119 +1,84 @@
-import { GeoJsonLayer } from 'deck.gl/typed';
-import { getLayer } from './your-file-name';
-import { hexToRGB } from '../../utils/colors';
-import sandboxedEval from '../../utils/sandbox';
-import { commonLayerProps } from '../common';
+import React from 'react';
+import { render } from '@testing-library/react';
+import EchartMultipleYAxis from './EchartMultipleYAxis';
+import Echart from '../components/Echart';
 
-jest.mock('../../utils/colors', () => ({
-  hexToRGB: jest.fn(),
-}));
+jest.mock('../components/Echart', () => jest.fn(() => <div>Echart Component</div>));
 
-jest.mock('../../utils/sandbox', () => jest.fn());
-
-jest.mock('../common', () => ({
-  commonLayerProps: jest.fn(),
-}));
-
-describe('getLayer', () => {
-  const mockFormData = {
-    slice_id: 1,
-    fill_color_picker: { r: 255, g: 0, b: 0, a: 1 },
-    stroke_color_picker: { r: 0, g: 0, b: 255, a: 1 },
-    extruded: true,
-    filled: true,
-    stroked: true,
-    line_width: 2,
-    point_radius_scale: 10,
-    line_width_unit: 'pixels',
-    js_data_mutator: '',
+describe('EchartMultipleYAxis', () => {
+  const mockEchartOptions = {
+    series: [
+      { data: [[1, 2], [3, 4], [2, 3]] },
+      { data: [[1, 5], [3, 6], [2, 7]] },
+    ],
   };
   
-  const mockPayload = {
-    data: {
-      features: [
-        {
-          geometry: {},
-          properties: { fillColor: '#ff0000', strokeColor: '#0000ff' },
-        },
-      ],
-      mapboxApiKey: 'test_key',
-    },
+  const mockFormData = {
+    orderByColumn: 'axis',
+    orderDesc: true,
   };
 
-  const mockOnAddFilter = jest.fn();
-  const mockSetTooltip = jest.fn();
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    hexToRGB.mockImplementation(color => color); // Simplified for testing
-    commonLayerProps.mockReturnValue({});
+  it('renders without crashing', () => {
+    const { container } = render(
+      <EchartMultipleYAxis
+        height={400}
+        width={800}
+        echartOptions={mockEchartOptions}
+        formData={mockFormData}
+      />
+    );
+    expect(container).toBeInTheDocument();
   });
 
-  it('should return a GeoJsonLayer with correct properties', () => {
-    const layer = getLayer(mockFormData, mockPayload, mockOnAddFilter, mockSetTooltip);
+  it('sorts series data correctly when orderDesc is true', () => {
+    const sortedData = [[3, 4], [2, 3], [1, 2]];
+    
+    render(
+      <EchartMultipleYAxis
+        height={400}
+        width={800}
+        echartOptions={mockEchartOptions}
+        formData={{ ...mockFormData, orderDesc: true }}
+      />
+    );
 
-    expect(layer).toBeInstanceOf(GeoJsonLayer);
-    expect(layer.props.id).toBe('geojson-layer-1');
-    expect(layer.props.data).toEqual(mockPayload.data.features);
-    expect(layer.props.extruded).toBe(true);
-    expect(layer.props.filled).toBe(true);
-    expect(layer.props.stroked).toBe(true);
-    expect(layer.props.getLineWidth).toBe(2);
-    expect(layer.props.pointRadiusScale).toBe(10);
-    expect(layer.props.lineWidthUnits).toBe('pixels');
-    expect(layer.props.getFillColor).toBeInstanceOf(Function);
-    expect(layer.props.getLineColor).toBeInstanceOf(Function);
-    expect(commonLayerProps).toHaveBeenCalled();
+    expect(mockEchartOptions.series[0].data).toEqual(sortedData);
   });
 
-  it('should correctly apply fillColor and strokeColor overrides', () => {
-    const layer = getLayer(mockFormData, mockPayload, mockOnAddFilter, mockSetTooltip);
+  it('sorts series data correctly when orderDesc is false', () => {
+    const sortedData = [[1, 2], [2, 3], [3, 4]];
+    
+    render(
+      <EchartMultipleYAxis
+        height={400}
+        width={800}
+        echartOptions={mockEchartOptions}
+        formData={{ ...mockFormData, orderDesc: false }}
+      />
+    );
 
-    const fillColor = layer.props.getFillColor(mockPayload.data.features[0]);
-    const lineColor = layer.props.getLineColor(mockPayload.data.features[0]);
-
-    expect(hexToRGB).toHaveBeenCalledWith('#ff0000');
-    expect(hexToRGB).toHaveBeenCalledWith('#0000ff');
-    expect(fillColor).toBe('#ff0000');
-    expect(lineColor).toBe('#0000ff');
+    expect(mockEchartOptions.series[0].data).toEqual(sortedData);
   });
 
-  it('should apply a JavaScript data mutator if provided', () => {
-    const mutator = jest.fn(data => data.slice(1));
-    sandboxedEval.mockReturnValue(mutator);
+  it('passes the correct props to the Echart component', () => {
+    const { height, width } = { height: 400, width: 800 };
 
-    const formDataWithMutator = {
-      ...mockFormData,
-      js_data_mutator: 'dummy mutator',
-    };
+    render(
+      <EchartMultipleYAxis
+        height={height}
+        width={width}
+        echartOptions={mockEchartOptions}
+        formData={mockFormData}
+      />
+    );
 
-    const layer = getLayer(formDataWithMutator, mockPayload, mockOnAddFilter, mockSetTooltip);
-
-    expect(sandboxedEval).toHaveBeenCalledWith('dummy mutator');
-    expect(mutator).toHaveBeenCalledWith(expect.any(Array));
-    expect(layer.props.data).toEqual(mockPayload.data.features.slice(1));
-  });
-
-  it('should handle empty or undefined data', () => {
-    const emptyPayload = { data: { features: [] } };
-
-    const layer = getLayer(mockFormData, emptyPayload, mockOnAddFilter, mockSetTooltip);
-
-    expect(layer).toBeInstanceOf(GeoJsonLayer);
-    expect(layer.props.data).toEqual([]);
-  });
-
-  it('should return a GeoJsonLayer even if optional fields are missing', () => {
-    const minimalFormData = {
-      slice_id: 1,
-      fill_color_picker: { r: 0, g: 0, b: 0, a: 0 },
-      stroke_color_picker: { r: 0, g: 0, b: 0, a: 0 },
-    };
-
-    const layer = getLayer(minimalFormData, mockPayload, mockOnAddFilter, mockSetTooltip);
-
-    expect(layer).toBeInstanceOf(GeoJsonLayer);
-    expect(layer.props.id).toBe('geojson-layer-1');
-    expect(layer.props.data).toEqual(mockPayload.data.features);
+    expect(Echart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        height,
+        width,
+        echartOptions: mockEchartOptions,
+      }),
+      {}
+    );
   });
 });
