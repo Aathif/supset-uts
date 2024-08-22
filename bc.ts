@@ -1,68 +1,86 @@
-import { formatLabel } from './path_to_formatLabel';
-import { EchartsRadarLabelType } from './path_to_types';
+import buildQuery from './path_to_buildQuery';
+import { buildQueryContext } from '@superset-ui/core';
 
-describe('formatLabel', () => {
-  const mockNumberFormatter = jest.fn((value) => `formatted_${value}`);
+jest.mock('@superset-ui/core', () => ({
+  buildQueryContext: jest.fn(),
+}));
 
-  it('should return only the formatted value when labelType is Value', () => {
-    const params = { name: 'TestName', value: 42 };
-    const result = formatLabel({
-      params,
-      labelType: EchartsRadarLabelType.Value,
-      numberFormatter: mockNumberFormatter,
+describe('buildQuery', () => {
+  const formData = {
+    metric: 'some_metric',
+    sort_by_metric: true,
+  };
+
+  const baseQueryObject = {
+    metrics: [],
+    orderby: [],
+  };
+
+  beforeEach(() => {
+    buildQueryContext.mockImplementation((formData, buildQueryObject) => {
+      return buildQueryObject(baseQueryObject);
     });
-
-    expect(mockNumberFormatter).toHaveBeenCalledWith(42);
-    expect(result).toBe('formatted_42');
   });
 
-  it('should return key and formatted value when labelType is KeyValue', () => {
-    const params = { name: 'TestName', value: 42 };
-    const result = formatLabel({
-      params,
-      labelType: EchartsRadarLabelType.KeyValue,
-      numberFormatter: mockNumberFormatter,
-    });
-
-    expect(mockNumberFormatter).toHaveBeenCalledWith(42);
-    expect(result).toBe('TestName: formatted_42');
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('should return the name when labelType is not recognized', () => {
-    const params = { name: 'TestName', value: 42 };
-    const result = formatLabel({
-      params,
-      labelType: 'UnknownLabelType' as EchartsRadarLabelType,
-      numberFormatter: mockNumberFormatter,
-    });
+  it('should build query with orderby if sort_by_metric is true', () => {
+    const result = buildQuery(formData);
 
-    // The formatter should not be called in this case
-    expect(mockNumberFormatter).not.toHaveBeenCalled();
-    expect(result).toBe('TestName');
+    expect(buildQueryContext).toHaveBeenCalledWith(formData, expect.any(Function));
+    expect(result).toEqual([
+      {
+        ...baseQueryObject,
+        orderby: [['some_metric', false]],
+      },
+    ]);
   });
 
-  it('should handle cases where name is undefined', () => {
-    const params = { name: undefined, value: 42 };
-    const result = formatLabel({
-      params,
-      labelType: EchartsRadarLabelType.KeyValue,
-      numberFormatter: mockNumberFormatter,
-    });
+  it('should build query without orderby if sort_by_metric is false', () => {
+    const formDataWithoutSortBy = {
+      ...formData,
+      sort_by_metric: false,
+    };
 
-    expect(mockNumberFormatter).toHaveBeenCalledWith(42);
-    expect(result).toBe(': formatted_42');
+    const result = buildQuery(formDataWithoutSortBy);
+
+    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutSortBy, expect.any(Function));
+    expect(result).toEqual([
+      {
+        ...baseQueryObject,
+      },
+    ]);
   });
 
-  it('should handle cases where value is undefined', () => {
-    const params = { name: 'TestName', value: undefined };
-    const result = formatLabel({
-      params,
-      labelType: EchartsRadarLabelType.Value,
-      numberFormatter: mockNumberFormatter,
-    });
+  it('should build query without orderby if sort_by_metric is not provided', () => {
+    const formDataWithoutSortBy = {
+      metric: 'some_metric',
+    };
 
-    // The formatter should be called with undefined
-    expect(mockNumberFormatter).toHaveBeenCalledWith(undefined);
-    expect(result).toBe('formatted_undefined');
+    const result = buildQuery(formDataWithoutSortBy);
+
+    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutSortBy, expect.any(Function));
+    expect(result).toEqual([
+      {
+        ...baseQueryObject,
+      },
+    ]);
+  });
+
+  it('should build query without orderby if metric is not provided', () => {
+    const formDataWithoutMetric = {
+      sort_by_metric: true,
+    };
+
+    const result = buildQuery(formDataWithoutMetric);
+
+    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutMetric, expect.any(Function));
+    expect(result).toEqual([
+      {
+        ...baseQueryObject,
+      },
+    ]);
   });
 });
