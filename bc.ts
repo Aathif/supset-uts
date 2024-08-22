@@ -1,65 +1,68 @@
-import buildQuery from './path_to_buildQuery';
-import { buildQueryContext } from '@superset-ui/core';
+import { formatLabel } from './path_to_formatLabel';
+import { EchartsRadarLabelType } from './path_to_types';
 
-jest.mock('@superset-ui/core', () => ({
-  buildQueryContext: jest.fn(),
-  ensureIsArray: jest.fn((input) => Array.isArray(input) ? input : [input]),
-}));
+describe('formatLabel', () => {
+  const mockNumberFormatter = jest.fn((value) => `formatted_${value}`);
 
-describe('buildQuery', () => {
-  const mockFormData = {
-    series_limit_metric: 'mock_metric',
-    metrics: ['metric_1', 'metric_2'],
-  };
+  it('should return only the formatted value when labelType is Value', () => {
+    const params = { name: 'TestName', value: 42 };
+    const result = formatLabel({
+      params,
+      labelType: EchartsRadarLabelType.Value,
+      numberFormatter: mockNumberFormatter,
+    });
 
-  beforeEach(() => {
-    buildQueryContext.mockClear();
+    expect(mockNumberFormatter).toHaveBeenCalledWith(42);
+    expect(result).toBe('formatted_42');
   });
 
-  it('should build a query with orderby set to series_limit_metric', () => {
-    buildQuery(mockFormData);
+  it('should return key and formatted value when labelType is KeyValue', () => {
+    const params = { name: 'TestName', value: 42 };
+    const result = formatLabel({
+      params,
+      labelType: EchartsRadarLabelType.KeyValue,
+      numberFormatter: mockNumberFormatter,
+    });
 
-    expect(buildQueryContext).toHaveBeenCalledWith(mockFormData, expect.any(Function));
-
-    const queryObjectBuilder = buildQueryContext.mock.calls[0][1];
-    const baseQueryObject = { metrics: ['metric_1'], orderby: [] };
-    const queryObjects = queryObjectBuilder(baseQueryObject);
-
-    expect(queryObjects[0].orderby).toEqual([['mock_metric', false]]);
+    expect(mockNumberFormatter).toHaveBeenCalledWith(42);
+    expect(result).toBe('TestName: formatted_42');
   });
 
-  it('should default to ordering by the first metric if series_limit_metric is not provided', () => {
-    const formDataWithoutSortByMetric = {
-      ...mockFormData,
-      series_limit_metric: null,
-    };
+  it('should return the name when labelType is not recognized', () => {
+    const params = { name: 'TestName', value: 42 };
+    const result = formatLabel({
+      params,
+      labelType: 'UnknownLabelType' as EchartsRadarLabelType,
+      numberFormatter: mockNumberFormatter,
+    });
 
-    buildQuery(formDataWithoutSortByMetric);
-
-    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutSortByMetric, expect.any(Function));
-
-    const queryObjectBuilder = buildQueryContext.mock.calls[0][1];
-    const baseQueryObject = { metrics: ['metric_1'], orderby: [] };
-    const queryObjects = queryObjectBuilder(baseQueryObject);
-
-    expect(queryObjects[0].orderby).toEqual([['metric_1', false]]);
+    // The formatter should not be called in this case
+    expect(mockNumberFormatter).not.toHaveBeenCalled();
+    expect(result).toBe('TestName');
   });
 
-  it('should not override orderby if no metrics are provided', () => {
-    const formDataWithoutMetrics = {
-      ...mockFormData,
-      metrics: [],
-      series_limit_metric: null,
-    };
+  it('should handle cases where name is undefined', () => {
+    const params = { name: undefined, value: 42 };
+    const result = formatLabel({
+      params,
+      labelType: EchartsRadarLabelType.KeyValue,
+      numberFormatter: mockNumberFormatter,
+    });
 
-    buildQuery(formDataWithoutMetrics);
+    expect(mockNumberFormatter).toHaveBeenCalledWith(42);
+    expect(result).toBe(': formatted_42');
+  });
 
-    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutMetrics, expect.any(Function));
+  it('should handle cases where value is undefined', () => {
+    const params = { name: 'TestName', value: undefined };
+    const result = formatLabel({
+      params,
+      labelType: EchartsRadarLabelType.Value,
+      numberFormatter: mockNumberFormatter,
+    });
 
-    const queryObjectBuilder = buildQueryContext.mock.calls[0][1];
-    const baseQueryObject = { metrics: [], orderby: [['some_metric', true]] };
-    const queryObjects = queryObjectBuilder(baseQueryObject);
-
-    expect(queryObjects[0].orderby).toEqual([['some_metric', true]]);
+    // The formatter should be called with undefined
+    expect(mockNumberFormatter).toHaveBeenCalledWith(undefined);
+    expect(result).toBe('formatted_undefined');
   });
 });
