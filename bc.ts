@@ -1,84 +1,52 @@
-import React from 'react';
-import { render } from '@testing-library/react';
-import EchartMultipleYAxis from './EchartMultipleYAxis';
-import Echart from '../components/Echart';
+import { renderTooltipFactory } from './path_to_your_function';
+import { smartDateVerboseFormatter, defaultNumberFormatter } from 'somewhere_in_your_project';
+import { t } from '@superset-ui/core';
 
-jest.mock('../components/Echart', () => jest.fn(() => <div>Echart Component</div>));
-
-describe('EchartMultipleYAxis', () => {
-  const mockEchartOptions = {
-    series: [
-      { data: [[1, 2], [3, 4], [2, 3]] },
-      { data: [[1, 5], [3, 6], [2, 7]] },
-    ],
-  };
+describe('renderTooltipFactory', () => {
+  const mockDate = '2023-08-16T00:00:00';
+  const mockFormattedDate = 'August 16, 2023';
+  const mockFormattedValue = '100.00';
+  const mockData = { data: [mockDate, 100] };
+  const mockParams = [{ data: mockData.data }];
   
-  const mockFormData = {
-    orderByColumn: 'axis',
-    orderDesc: true,
-  };
+  const customDateFormatter = jest.fn(() => mockFormattedDate);
+  const customValueFormatter = jest.fn(() => mockFormattedValue);
 
-  it('renders without crashing', () => {
-    const { container } = render(
-      <EchartMultipleYAxis
-        height={400}
-        width={800}
-        echartOptions={mockEchartOptions}
-        formData={mockFormData}
-      />
-    );
-    expect(container).toBeInTheDocument();
+  beforeAll(() => {
+    // Mock the translation function
+    jest.spyOn(global, 't').mockImplementation((key) => key);
   });
 
-  it('sorts series data correctly when orderDesc is true', () => {
-    const sortedData = [[3, 4], [2, 3], [1, 2]];
-    
-    render(
-      <EchartMultipleYAxis
-        height={400}
-        width={800}
-        echartOptions={mockEchartOptions}
-        formData={{ ...mockFormData, orderDesc: true }}
-      />
-    );
-
-    expect(mockEchartOptions.series[0].data).toEqual(sortedData);
+  afterAll(() => {
+    jest.restoreAllMocks();
   });
 
-  it('sorts series data correctly when orderDesc is false', () => {
-    const sortedData = [[1, 2], [2, 3], [3, 4]];
-    
-    render(
-      <EchartMultipleYAxis
-        height={400}
-        width={800}
-        echartOptions={mockEchartOptions}
-        formData={{ ...mockFormData, orderDesc: false }}
-      />
-    );
+  it('should render tooltip with custom formatters', () => {
+    const renderTooltip = renderTooltipFactory(customDateFormatter, customValueFormatter);
+    const result = renderTooltip(mockParams);
 
-    expect(mockEchartOptions.series[0].data).toEqual(sortedData);
+    expect(customDateFormatter).toHaveBeenCalledWith(mockDate);
+    expect(customValueFormatter).toHaveBeenCalledWith(100);
+    expect(result).toContain(mockFormattedDate);
+    expect(result).toContain(mockFormattedValue);
   });
 
-  it('passes the correct props to the Echart component', () => {
-    const { height, width } = { height: 400, width: 800 };
+  it('should render tooltip with default formatters', () => {
+    const renderTooltip = renderTooltipFactory();
+    const result = renderTooltip(mockParams);
 
-    render(
-      <EchartMultipleYAxis
-        height={height}
-        width={width}
-        echartOptions={mockEchartOptions}
-        formData={mockFormData}
-      />
-    );
+    expect(result).toContain(smartDateVerboseFormatter(mockDate));
+    expect(result).toContain(defaultNumberFormatter(100));
+  });
 
-    expect(Echart).toHaveBeenCalledWith(
-      expect.objectContaining({
-        height,
-        width,
-        echartOptions: mockEchartOptions,
-      }),
-      {}
-    );
+  it('should render "N/A" when value is null', () => {
+    const mockNullData = { data: [mockDate, null] };
+    const mockNullParams = [{ data: mockNullData.data }];
+    const renderTooltip = renderTooltipFactory(customDateFormatter, customValueFormatter);
+    const result = renderTooltip(mockNullParams);
+
+    expect(customDateFormatter).toHaveBeenCalledWith(mockDate);
+    expect(result).toContain(mockFormattedDate);
+    expect(result).toContain(t('N/A'));
   });
 });
