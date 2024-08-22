@@ -1,86 +1,103 @@
-import buildQuery from './path_to_buildQuery';
-import { buildQueryContext } from '@superset-ui/core';
+import { formatTooltip } from './path_to_formatTooltip';
+import { NumberFormats, getNumberFormatter } from '@superset-ui/core';
+
+// Mock theme and formatters
+const mockTheme = {
+  typography: {
+    sizes: { m: 14 },
+    weights: { bold: 700 },
+  },
+  colors: {
+    grayscale: { base: '#000000' },
+  },
+};
+
+const primaryValueFormatter = jest.fn(value => `Primary: ${value}`);
+const secondaryValueFormatter = jest.fn(value => `Secondary: ${value}`);
+const percentFormatter = jest.fn(value => `${(value * 100).toFixed(2)}%`);
 
 jest.mock('@superset-ui/core', () => ({
-  buildQueryContext: jest.fn(),
+  NumberFormats: {
+    PERCENT_2_POINT: '0.00%',
+  },
+  getNumberFormatter: jest.fn(() => percentFormatter),
 }));
 
-describe('buildQuery', () => {
-  const formData = {
-    metric: 'some_metric',
-    sort_by_metric: true,
+describe('formatTooltip', () => {
+  const params = {
+    data: {
+      value: 100,
+      secondaryValue: 50,
+      name: 'NodeName',
+    },
+    treePathInfo: [
+      { name: 'Root', dataIndex: 0, value: 500 },
+      { name: 'ParentNode', dataIndex: 1, value: 200 },
+      { name: 'NodeName', dataIndex: 2, value: 100 },
+    ],
   };
 
-  const baseQueryObject = {
-    metrics: [],
-    orderby: [],
-  };
-
-  beforeEach(() => {
-    buildQueryContext.mockImplementation((formData, buildQueryObject) => {
-      return buildQueryObject(baseQueryObject);
+  it('should format tooltip with parent node and secondary metric', () => {
+    const result = formatTooltip({
+      params,
+      primaryValueFormatter,
+      secondaryValueFormatter,
+      colorByCategory: false,
+      totalValue: 1000,
+      metricLabel: 'Metric',
+      secondaryMetricLabel: 'SecondaryMetric',
+      theme: mockTheme,
     });
+
+    expect(result).toContain('<div style="font-weight: 700">NodeName</div>');
+    expect(result).toContain('<div>10.00% of total</div>');
+    expect(result).toContain('<div>50.00% of ParentNode</div>');
+    expect(result).toContain('<div>Metric: Primary: 100, SecondaryMetric: Secondary: 50</div>');
+    expect(result).toContain('<div>Metric/SecondaryMetric: 50.00%</div>');
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should build query with orderby if sort_by_metric is true', () => {
-    const result = buildQuery(formData);
-
-    expect(buildQueryContext).toHaveBeenCalledWith(formData, expect.any(Function));
-    expect(result).toEqual([
-      {
-        ...baseQueryObject,
-        orderby: [['some_metric', false]],
+  it('should format tooltip without parent node', () => {
+    const result = formatTooltip({
+      params: {
+        ...params,
+        treePathInfo: [
+          { name: 'Root', dataIndex: 0, value: 500 },
+          { name: 'NodeName', dataIndex: 1, value: 100 },
+        ],
       },
-    ]);
+      primaryValueFormatter,
+      secondaryValueFormatter,
+      colorByCategory: false,
+      totalValue: 1000,
+      metricLabel: 'Metric',
+      secondaryMetricLabel: 'SecondaryMetric',
+      theme: mockTheme,
+    });
+
+    expect(result).not.toContain('of ParentNode');
+    expect(result).toContain('<div>Metric: Primary: 100, SecondaryMetric: Secondary: 50</div>');
   });
 
-  it('should build query without orderby if sort_by_metric is false', () => {
-    const formDataWithoutSortBy = {
-      ...formData,
-      sort_by_metric: false,
-    };
+  it('should format tooltip with color by category', () => {
+    const result = formatTooltip({
+      params,
+      primaryValueFormatter,
+      secondaryValueFormatter,
+      colorByCategory: true,
+      totalValue: 1000,
+      metricLabel: 'Metric',
+      secondaryMetricLabel: 'SecondaryMetric',
+      theme: mockTheme,
+    });
 
-    const result = buildQuery(formDataWithoutSortBy);
-
-    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutSortBy, expect.any(Function));
-    expect(result).toEqual([
-      {
-        ...baseQueryObject,
-      },
-    ]);
+    expect(result).toContain('<div>Metric: Primary: 100</div>');
+    expect(result).not.toContain('SecondaryMetric: Secondary: 50');
+    expect(result).not.toContain('Metric/SecondaryMetric: 50.00%');
   });
 
-  it('should build query without orderby if sort_by_metric is not provided', () => {
-    const formDataWithoutSortBy = {
-      metric: 'some_metric',
-    };
-
-    const result = buildQuery(formDataWithoutSortBy);
-
-    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutSortBy, expect.any(Function));
-    expect(result).toEqual([
-      {
-        ...baseQueryObject,
-      },
-    ]);
-  });
-
-  it('should build query without orderby if metric is not provided', () => {
-    const formDataWithoutMetric = {
-      sort_by_metric: true,
-    };
-
-    const result = buildQuery(formDataWithoutMetric);
-
-    expect(buildQueryContext).toHaveBeenCalledWith(formDataWithoutMetric, expect.any(Function));
-    expect(result).toEqual([
-      {
-        ...baseQueryObject,
-      },
-    ]);
-  });
-});
+  it('should escape HTML characters in node name', () => {
+    const result = formatTooltip({
+      params: {
+        ...params,
+        data: {
+          ...params
