@@ -100,4 +100,19 @@ describe('formatTooltip', () => {
       params: {
         ...params,
         data: {
-          ...params
+          ...params.data,
+          name: 'Node<Name>',
+        },
+      },
+      primaryValueFormatter,
+      secondaryValueFormatter,
+      colorByCategory: true,
+      totalValue: 1000,
+      metricLabel: 'Metric',
+      secondaryMetricLabel: 'SecondaryMetric',
+      theme: mockTheme,
+    });
+
+    expect(result).toContain('<div style="font-weight: 700">Node&lt;Name&gt;</div>');
+  });
+});
