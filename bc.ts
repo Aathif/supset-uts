@@ -1,55 +1,89 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import ShowSQL from './ShowSQL';
-import ModalTrigger from 'src/components/ModalTrigger';
-import { IconTooltip } from 'src/components/IconTooltip';
+import DashboardCard from './DashboardCard';
+import { Dashboard } from 'src/views/CRUD/types';
+import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '@superset-ui/core';
+import { lightTheme } from '@superset-ui/core';
 
-jest.mock('react-syntax-highlighter/dist/cjs/light', () => ({
-  registerLanguage: jest.fn(),
-  default: ({ children }) => <div data-testid="syntax-highlighter">{children}</div>,
-}));
+const mockDashboard: Dashboard = {
+  id: 1,
+  url: '/dashboard/1',
+  dashboard_title: 'Test Dashboard',
+  certified_by: null,
+  certification_details: null,
+  thumbnail_url: '',
+  changed_on_delta_humanized: 'a day ago',
+  published: true,
+  owners: [],
+};
 
-jest.mock('src/components/ModalTrigger', () => jest.fn(({ triggerNode, modalBody }) => (
-  <div>
-    <div data-testid="trigger-node" onClick={() => setIsOpen(true)}>
-      {triggerNode}
-    </div>
-    {modalBody}
-  </div>
-)));
+const defaultProps = {
+  dashboard: mockDashboard,
+  hasPerm: jest.fn(() => true),
+  bulkSelectEnabled: false,
+  loading: false,
+  favoriteStatus: false,
+  saveFavoriteStatus: jest.fn(),
+  handleBulkDashboardExport: jest.fn(),
+  onDelete: jest.fn(),
+};
 
-jest.mock('src/components/IconTooltip', () => jest.fn(({ tooltip }) => (
-  <div data-testid="icon-tooltip">{tooltip}</div>
-)));
+const renderWithProviders = (props = {}) => {
+  return render(
+    <ThemeProvider theme={lightTheme}>
+      <MemoryRouter>
+        <DashboardCard {...defaultProps} {...props} />
+      </MemoryRouter>
+    </ThemeProvider>,
+  );
+};
 
-describe('ShowSQL Component', () => {
-  const sqlString = 'SELECT * FROM table;';
-  const tooltipText = 'Show SQL';
-  const title = 'SQL Query';
-
-  beforeEach(() => {
-    jest.clearAllMocks();
+describe('DashboardCard', () => {
+  it('renders the dashboard title and modified date', () => {
+    renderWithProviders();
+    expect(screen.getByText('Test Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('a day ago')).toBeInTheDocument();
   });
 
-  it('renders the IconTooltip with the correct tooltip text', () => {
-    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
-    expect(screen.getByTestId('icon-tooltip')).toHaveTextContent(tooltipText);
+  it('renders the "published" label when the dashboard is published', () => {
+    renderWithProviders();
+    expect(screen.getByText('published')).toBeInTheDocument();
   });
 
-  it('renders the ModalTrigger with the correct modal title', () => {
-    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
-    const modalTrigger = screen.getByTestId('trigger-node');
-    expect(modalTrigger).toBeInTheDocument();
+  it('calls the "saveFavoriteStatus" function when the favorite star is clicked', () => {
+    renderWithProviders({ userId: 1 });
+    fireEvent.click(screen.getByRole('button', { name: /favorite/i }));
+    expect(defaultProps.saveFavoriteStatus).toHaveBeenCalledWith(1, false);
   });
 
-  it('renders the SQL code inside the SyntaxHighlighter', () => {
-    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
-    expect(screen.getByTestId('syntax-highlighter')).toHaveTextContent(sqlString);
+  it('calls the "openDashboardEditModal" when the edit option is clicked', () => {
+    const openDashboardEditModal = jest.fn();
+    renderWithProviders({ openDashboardEditModal });
+    
+    fireEvent.click(screen.getByTestId('dashboard-card-option-edit-button'));
+    expect(openDashboardEditModal).toHaveBeenCalledWith(mockDashboard);
   });
 
-  it('opens the modal and displays SQL when the IconTooltip is clicked', () => {
-    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
-    fireEvent.click(screen.getByTestId('trigger-node'));
-    expect(screen.getByTestId('syntax-highlighter')).toHaveTextContent(sqlString);
+  it('calls the "handleBulkDashboardExport" when the export option is clicked', () => {
+    renderWithProviders();
+    
+    fireEvent.click(screen.getByTestId('dashboard-card-option-export-button'));
+    expect(defaultProps.handleBulkDashboardExport).toHaveBeenCalledWith([mockDashboard]);
+  });
+
+  it('calls the "onDelete" function when the delete option is clicked', () => {
+    renderWithProviders();
+    
+    fireEvent.click(screen.getByTestId('dashboard-card-option-delete-button'));
+    expect(defaultProps.onDelete).toHaveBeenCalledWith(mockDashboard);
+  });
+
+  it('does not render edit, export, or delete options if permissions are not granted', () => {
+    renderWithProviders({ hasPerm: jest.fn(() => false) });
+    
+    expect(screen.queryByTestId('dashboard-card-option-edit-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dashboard-card-option-export-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dashboard-card-option-delete-button')).not.toBeInTheDocument();
   });
 });
