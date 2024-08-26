@@ -1,50 +1,55 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import Slider, { SliderSingleProps, SliderRangeProps } from './Slider';
-import AntdSlider from 'antd/lib/slider';
+import { render, screen, fireEvent } from '@testing-library/react';
+import ShowSQL from './ShowSQL';
+import ModalTrigger from 'src/components/ModalTrigger';
+import { IconTooltip } from 'src/components/IconTooltip';
 
-jest.mock('antd/lib/slider', () => jest.fn((props) => <div data-testid="antd-slider" {...props} />));
+jest.mock('react-syntax-highlighter/dist/cjs/light', () => ({
+  registerLanguage: jest.fn(),
+  default: ({ children }) => <div data-testid="syntax-highlighter">{children}</div>,
+}));
 
-describe('Slider component', () => {
-  afterEach(() => {
+jest.mock('src/components/ModalTrigger', () => jest.fn(({ triggerNode, modalBody }) => (
+  <div>
+    <div data-testid="trigger-node" onClick={() => setIsOpen(true)}>
+      {triggerNode}
+    </div>
+    {modalBody}
+  </div>
+)));
+
+jest.mock('src/components/IconTooltip', () => jest.fn(({ tooltip }) => (
+  <div data-testid="icon-tooltip">{tooltip}</div>
+)));
+
+describe('ShowSQL Component', () => {
+  const sqlString = 'SELECT * FROM table;';
+  const tooltipText = 'Show SQL';
+  const title = 'SQL Query';
+
+  beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('renders the Slider component', () => {
-    render(<Slider min={0} max={100} />);
-    const slider = screen.getByTestId('antd-slider');
-    expect(slider).toBeInTheDocument();
+  it('renders the IconTooltip with the correct tooltip text', () => {
+    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
+    expect(screen.getByTestId('icon-tooltip')).toHaveTextContent(tooltipText);
   });
 
-  it('passes props to AntdSlider', () => {
-    const props: SliderSingleProps = {
-      min: 0,
-      max: 100,
-      defaultValue: 50,
-    };
-
-    render(<Slider {...props} />);
-    const slider = screen.getByTestId('antd-slider');
-
-    expect(slider).toHaveAttribute('min', '0');
-    expect(slider).toHaveAttribute('max', '100');
-    expect(slider).toHaveAttribute('defaultValue', '50');
+  it('renders the ModalTrigger with the correct modal title', () => {
+    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
+    const modalTrigger = screen.getByTestId('trigger-node');
+    expect(modalTrigger).toBeInTheDocument();
   });
 
-  it('renders a range slider with SliderRangeProps', () => {
-    const rangeProps: SliderRangeProps = {
-      range: true,
-      min: 0,
-      max: 100,
-      defaultValue: [20, 80],
-    };
+  it('renders the SQL code inside the SyntaxHighlighter', () => {
+    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
+    expect(screen.getByTestId('syntax-highlighter')).toHaveTextContent(sqlString);
+  });
 
-    render(<Slider {...rangeProps} />);
-    const slider = screen.getByTestId('antd-slider');
-
-    expect(slider).toHaveAttribute('range', 'true');
-    expect(slider).toHaveAttribute('min', '0');
-    expect(slider).toHaveAttribute('max', '100');
-    expect(slider).toHaveAttribute('defaultValue', '20,80');
+  it('opens the modal and displays SQL when the IconTooltip is clicked', () => {
+    render(<ShowSQL tooltipText={tooltipText} title={title} sql={sqlString} />);
+    fireEvent.click(screen.getByTestId('trigger-node'));
+    expect(screen.getByTestId('syntax-highlighter')).toHaveTextContent(sqlString);
   });
 });
