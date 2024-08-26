@@ -1,62 +1,39 @@
-import { tokenizeToNumericArray } from './path-to-your-function'; // Adjust the import path
+import { tokenizeToStringArray } from './path-to-your-function'; // Adjust the import path
 
-jest.mock('@superset-ui/core', () => ({
-  validateNumber: jest.fn(),
-}));
-
-describe('tokenizeToNumericArray', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
+describe('tokenizeToStringArray', () => {
   it('should return null for null input', () => {
-    expect(tokenizeToNumericArray(null)).toBeNull();
+    expect(tokenizeToStringArray(null)).toBeNull();
   });
 
   it('should return null for undefined input', () => {
-    expect(tokenizeToNumericArray(undefined)).toBeNull();
+    expect(tokenizeToStringArray(undefined)).toBeNull();
   });
 
   it('should return null for empty string input', () => {
-    expect(tokenizeToNumericArray('')).toBeNull();
+    expect(tokenizeToStringArray('')).toBeNull();
   });
 
   it('should return null for string with only whitespace', () => {
-    expect(tokenizeToNumericArray('   ')).toBeNull();
+    expect(tokenizeToStringArray('   ')).toBeNull();
   });
 
-  it('should return an array of numbers for valid numeric input', () => {
-    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
-    mockValidateNumber.mockReturnValue(false);
-
-    expect(tokenizeToNumericArray('1,2,3.5')).toEqual([1, 2, 3.5]);
+  it('should return an array of trimmed strings for valid comma-separated input', () => {
+    expect(tokenizeToStringArray('  foo  , bar ,baz')).toEqual(['foo', 'bar', 'baz']);
   });
 
-  it('should throw an error if any token is not numeric', () => {
-    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
-    mockValidateNumber.mockImplementation(token => isNaN(parseFloat(token)));
-
-    expect(() => tokenizeToNumericArray('1,2,a')).toThrow('All values should be numeric');
+  it('should handle a single string without commas', () => {
+    expect(tokenizeToStringArray('   single   ')).toEqual(['single']);
   });
 
   it('should handle leading and trailing whitespace in tokens', () => {
-    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
-    mockValidateNumber.mockReturnValue(false);
-
-    expect(tokenizeToNumericArray(' 1 , 2 , 3 ')).toEqual([1, 2, 3]);
+    expect(tokenizeToStringArray('  one  ,  two ,  three ')).toEqual(['one', 'two', 'three']);
   });
 
-  it('should handle a single numeric token', () => {
-    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
-    mockValidateNumber.mockReturnValue(false);
-
-    expect(tokenizeToNumericArray('42')).toEqual([42]);
+  it('should handle input with consecutive commas', () => {
+    expect(tokenizeToStringArray('foo,,bar')).toEqual(['foo', '', 'bar']);
   });
 
-  it('should handle a single invalid token', () => {
-    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
-    mockValidateNumber.mockImplementation(token => isNaN(parseFloat(token)));
-
-    expect(() => tokenizeToNumericArray('a')).toThrow('All values should be numeric');
+  it('should handle input with no content between commas', () => {
+    expect(tokenizeToStringArray(',,')).toEqual(['', '', '']);
   });
 });
