@@ -1,257 +1,132 @@
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
-/* eslint-disable camelcase */
-import { CategoricalColorNamespace, getNumberFormatter, isEventAnnotationLayer, isFormulaAnnotationLayer, isIntervalAnnotationLayer, isTimeseriesAnnotationLayer } from '@superset-ui/core';
+import { CategoricalColorNamespace, getNumberFormatter } from '@superset-ui/core';
 import { DEFAULT_FORM_DATA } from './types';
-import { ForecastSeriesEnum } from '../types';
-import { parseYAxisBound } from '../utils/controls';
-import { dedupSeries, extractTimeseriesSeries, getLegendProps } from '../utils/series';
-import { extractAnnotationLabels } from '../utils/annotation';
-import { extractForecastSeriesContext, extractProphetValuesFromTooltipParams, formatProphetTooltipSeries, rebaseTimeseriesDatum } from '../utils/prophet';
-import { defaultGrid, defaultTooltip, defaultYAxis } from '../defaults';
-import { getPadding, getTooltipFormatter, getXAxisFormatter, transformEventAnnotation, transformFormulaAnnotation, transformIntervalAnnotation, transformSeries, transformTimeseriesAnnotation } from '../Timeseries/transformers';
-import { TIMESERIES_CONSTANTS } from '../constants';
-export default function transformProps(chartProps) {
-  const {
-    width,
-    height,
-    formData,
-    queriesData
-  } = chartProps;
-  const {
-    annotation_data: annotationData_,
-    data: data1 = []
-  } = queriesData[0];
-  const {
-    data: data2 = []
-  } = queriesData[1];
-  const annotationData = annotationData_ || {};
-  const {
-    area,
-    areaB,
-    annotationLayers,
-    colorScheme,
-    contributionMode,
-    legendOrientation,
-    legendType,
-    logAxis,
-    logAxisSecondary,
-    markerEnabled,
-    markerEnabledB,
-    markerSize,
-    markerSizeB,
-    opacity,
-    opacityB,
-    minorSplitLine,
-    seriesType,
-    seriesTypeB,
-    showLegend,
-    stack,
-    stackB,
-    truncateYAxis,
-    tooltipTimeFormat,
-    yAxisFormat,
-    yAxisFormatSecondary,
-    xAxisShowMinLabel,
-    xAxisShowMaxLabel,
-    xAxisTimeFormat,
-    yAxisBounds,
-    yAxisIndex,
-    yAxisIndexB,
-    yAxisTitle,
-    yAxisTitleSecondary,
-    zoomable,
-    richTooltip,
-    xAxisLabelRotation
-  } = { ...DEFAULT_FORM_DATA,
-    ...formData
+import transformProps from './transformProps';
+import { extractTimeseriesSeries, rebaseTimeseriesDatum } from '../utils/series';
+import { transformSeries, getPadding, getTooltipFormatter, getXAxisFormatter } from '../Timeseries/transformers';
+
+jest.mock('@superset-ui/core', () => ({
+  CategoricalColorNamespace: {
+    getScale: jest.fn().mockReturnValue(jest.fn()),
+  },
+  getNumberFormatter: jest.fn(),
+}));
+
+jest.mock('../utils/series', () => ({
+  extractTimeseriesSeries: jest.fn(),
+  rebaseTimeseriesDatum: jest.fn(),
+}));
+
+jest.mock('../Timeseries/transformers', () => ({
+  transformSeries: jest.fn(),
+  getPadding: jest.fn().mockReturnValue({}),
+  getTooltipFormatter: jest.fn().mockReturnValue(jest.fn()),
+  getXAxisFormatter: jest.fn().mockReturnValue(jest.fn()),
+}));
+
+describe('transformProps', () => {
+  const defaultChartProps = {
+    width: 800,
+    height: 600,
+    formData: {
+      area: true,
+      colorScheme: 'supersetColors',
+      yAxisFormat: '.2f',
+      xAxisTimeFormat: 'smart_date',
+      annotationLayers: [],
+    },
+    queriesData: [
+      {
+        data: [],
+        annotation_data: {},
+      },
+      {
+        data: [],
+      },
+    ],
   };
-  const colorScale = CategoricalColorNamespace.getScale(colorScheme);
-  const rawSeriesA = extractTimeseriesSeries(rebaseTimeseriesDatum(data1), {
-    fillNeighborValue: stack ? 0 : undefined
-  });
-  const rawSeriesB = extractTimeseriesSeries(rebaseTimeseriesDatum(data2), {
-    fillNeighborValue: stackB ? 0 : undefined
-  });
-  const series = [];
-  const formatter = getNumberFormatter(contributionMode ? ',.0%' : yAxisFormat);
-  const formatterSecondary = getNumberFormatter(contributionMode ? ',.0%' : yAxisFormatSecondary);
-  rawSeriesA.forEach(entry => {
-    const transformedSeries = transformSeries(entry, colorScale, {
-      area,
-      markerEnabled,
-      markerSize,
-      opacity,
-      seriesType,
-      stack,
-      richTooltip,
-      yAxisIndex
-    });
-    if (transformedSeries) series.push(transformedSeries);
-  });
-  rawSeriesB.forEach(entry => {
-    const transformedSeries = transformSeries(entry, colorScale, {
-      area: areaB,
-      markerEnabled: markerEnabledB,
-      markerSize: markerSizeB,
-      opacity: opacityB,
-      seriesType: seriesTypeB,
-      stack: stackB,
-      richTooltip,
-      yAxisIndex: yAxisIndexB
-    });
-    if (transformedSeries) series.push(transformedSeries);
-  });
-  annotationLayers.filter(layer => layer.show).forEach(layer => {
-    if (isFormulaAnnotationLayer(layer)) series.push(transformFormulaAnnotation(layer, data1, colorScale));else if (isIntervalAnnotationLayer(layer)) {
-      series.push(...transformIntervalAnnotation(layer, data1, annotationData, colorScale));
-    } else if (isEventAnnotationLayer(layer)) {
-      series.push(...transformEventAnnotation(layer, data1, annotationData, colorScale));
-    } else if (isTimeseriesAnnotationLayer(layer)) {
-      series.push(...transformTimeseriesAnnotation(layer, markerSize, data1, annotationData));
-    }
-  }); // yAxisBounds need to be parsed to replace incompatible values with undefined
 
-  let [min, max] = (yAxisBounds || []).map(parseYAxisBound); // default to 0-100% range when doing row-level contribution chart
+  it('should return an object with echartOptions, width, and height', () => {
+    const result = transformProps(defaultChartProps);
 
-  if (contributionMode === 'row' && stack) {
-    if (min === undefined) min = 0;
-    if (max === undefined) max = 1;
-  }
+    expect(result).toHaveProperty('echartOptions');
+    expect(result).toHaveProperty('width', 800);
+    expect(result).toHaveProperty('height', 600);
+  });
 
-  const tooltipFormatter = getTooltipFormatter(tooltipTimeFormat);
-  const xAxisFormatter = getXAxisFormatter(xAxisTimeFormat);
-  const addYAxisLabelOffset = !!(yAxisTitle || yAxisTitleSecondary);
-  const chartPadding = getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable);
-  const echartOptions = {
-    useUTC: true,
-    grid: { ...defaultGrid,
-      ...chartPadding
-    },
-    xAxis: {
-      type: 'time',
-      axisLabel: {
-        showMinLabel: xAxisShowMinLabel,
-        showMaxLabel: xAxisShowMaxLabel,
-        formatter: xAxisFormatter,
-        rotate: xAxisLabelRotation,
-        color: '#626D8A',
-        fontSize: 11,
+  it('should correctly configure the echartOptions', () => {
+    const mockColorScale = jest.fn();
+    CategoricalColorNamespace.getScale.mockReturnValue(mockColorScale);
+    const mockFormatter = jest.fn();
+    getNumberFormatter.mockReturnValue(mockFormatter);
+
+    const result = transformProps(defaultChartProps);
+
+    expect(result.echartOptions).toBeDefined();
+    expect(result.echartOptions.series).toBeDefined();
+    expect(result.echartOptions.grid).toBeDefined();
+    expect(result.echartOptions.xAxis).toBeDefined();
+    expect(result.echartOptions.yAxis).toBeDefined();
+    expect(result.echartOptions.legend).toBeDefined();
+    expect(result.echartOptions.tooltip).toBeDefined();
+  });
+
+  it('should call necessary utility functions with correct parameters', () => {
+    const formData = {
+      ...DEFAULT_FORM_DATA,
+      colorScheme: 'supersetColors',
+      yAxisFormat: '.2f',
+    };
+    const queriesData = [
+      {
+        data: [
+          { key: 'value1' },
+        ],
       },
-      axisLine: {
-        lineStyle: {
-          color: '#EAEEF4'
-        }
-      }
-    },
-    yAxis: [{ ...defaultYAxis,
-      type: logAxis ? 'log' : 'value',
-      min,
-      max,
-      minorTick: {
-        show: true
+      {
+        data: [
+          { key: 'value2' },
+        ],
       },
-      minorSplitLine: {
-        show: minorSplitLine
-      },
-      axisLabel: {
-        formatter,
-        color: '#626D8A',
-        fontSize: 11,
-      },
-      axisLine: {
-        lineStyle: {
-          color: '#EAEEF4'
+    ];
+
+    const chartProps = {
+      ...defaultChartProps,
+      formData,
+      queriesData,
+    };
+
+    transformProps(chartProps);
+
+    expect(rebaseTimeseriesDatum).toHaveBeenCalled();
+    expect(extractTimeseriesSeries).toHaveBeenCalled();
+    expect(transformSeries).toHaveBeenCalled();
+    expect(getPadding).toHaveBeenCalled();
+    expect(getTooltipFormatter).toHaveBeenCalledWith('smart_date');
+    expect(getXAxisFormatter).toHaveBeenCalledWith('smart_date');
+  });
+
+  it('should handle annotation layers correctly', () => {
+    const formData = {
+      ...DEFAULT_FORM_DATA,
+      annotationLayers: [
+        {
+          name: 'annotation1',
+          show: true,
+          annotationType: 'FORMULA',
         },
-      },
-      scale: truncateYAxis,
-      name: yAxisTitle
-    }, { ...defaultYAxis,
-      type: logAxisSecondary ? 'log' : 'value',
-      min,
-      max,
-      minorTick: {
-        show: true
-      },
-      splitLine: {
-        show: false
-      },
-      minorSplitLine: {
-        show: minorSplitLine
-      },
-      axisLabel: {
-        formatter: formatterSecondary
-      },
-      scale: truncateYAxis,
-      name: yAxisTitleSecondary
-    }],
-    tooltip: { ...defaultTooltip,
-      trigger: richTooltip ? 'axis' : 'item',
-      formatter: params => {
-        const value = !richTooltip ? params.value : params[0].value[0];
-        const prophetValue = !richTooltip ? [params] : params;
-        const rows = [`${tooltipFormatter(value)}`];
-        const prophetValues = extractProphetValuesFromTooltipParams(prophetValue);
-        Object.keys(prophetValues).forEach(key => {
-          const value = prophetValues[key];
-          rows.push(formatProphetTooltipSeries({ ...value,
-            seriesName: key,
-            formatter
-          }));
-        });
-        return rows.join('<br />');
-      }
-    },
-    legend: { ...getLegendProps(legendType, legendOrientation, showLegend, zoomable),
-      textStyle: {
-        fontSize: 11,
-        color: '#626D8A'
-      },
-      // @ts-ignore
-      data: rawSeriesA.concat(rawSeriesB).filter(entry => extractForecastSeriesContext(entry.name || '').type === ForecastSeriesEnum.Observation).map(entry => entry.name || '').concat(extractAnnotationLabels(annotationLayers, annotationData))
-    },
-    series: dedupSeries(series),
-    toolbox: {
-      show: zoomable,
-      top: TIMESERIES_CONSTANTS.toolboxTop,
-      right: TIMESERIES_CONSTANTS.toolboxRight,
-      feature: {
-        dataZoom: {
-          yAxisIndex: false,
-          title: {
-            zoom: 'zoom area',
-            back: 'restore zoom'
-          }
-        }
-      }
-    },
-    dataZoom: zoomable ? [{
-      type: 'slider',
-      start: TIMESERIES_CONSTANTS.dataZoomStart,
-      end: TIMESERIES_CONSTANTS.dataZoomEnd,
-      bottom: TIMESERIES_CONSTANTS.zoomBottom
-    }] : []
-  };
-  return {
-    echartOptions,
-    width,
-    height
-  };
-}
+      ],
+    };
+
+    const chartProps = {
+      ...defaultChartProps,
+      formData,
+    };
+
+    const result = transformProps(chartProps);
+
+    expect(result.echartOptions.series).toBeDefined();
+    // Add more specific expectations depending on how annotations are transformed
+  });
+
+  // Add more test cases as necessary to cover other logic branches and edge cases
+});
