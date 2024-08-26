@@ -1,45 +1,62 @@
-import { getURIDirectory } from './path-to-your-function'; // Adjust the import path
+import { tokenizeToNumericArray } from './path-to-your-function'; // Adjust the import path
 
-describe('getURIDirectory', () => {
-  it('should return the default directory for base endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData);
-    expect(result).toBe('/superset/explore');
+jest.mock('@superset-ui/core', () => ({
+  validateNumber: jest.fn(),
+}));
+
+describe('tokenizeToNumericArray', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('should return the explore_json directory for json endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData, 'json');
-    expect(result).toBe('/superset/explore_json');
+  it('should return null for null input', () => {
+    expect(tokenizeToNumericArray(null)).toBeNull();
   });
 
-  it('should return the explore_json directory for csv endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData, 'csv');
-    expect(result).toBe('/superset/explore_json');
+  it('should return null for undefined input', () => {
+    expect(tokenizeToNumericArray(undefined)).toBeNull();
   });
 
-  it('should return the explore_json directory for query endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData, 'query');
-    expect(result).toBe('/superset/explore_json');
+  it('should return null for empty string input', () => {
+    expect(tokenizeToNumericArray('')).toBeNull();
   });
 
-  it('should return the explore_json directory for results endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData, 'results');
-    expect(result).toBe('/superset/explore_json');
+  it('should return null for string with only whitespace', () => {
+    expect(tokenizeToNumericArray('   ')).toBeNull();
   });
 
-  it('should return the explore_json directory for samples endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData, 'samples');
-    expect(result).toBe('/superset/explore_json');
+  it('should return an array of numbers for valid numeric input', () => {
+    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
+    mockValidateNumber.mockReturnValue(false);
+
+    expect(tokenizeToNumericArray('1,2,3.5')).toEqual([1, 2, 3.5]);
   });
 
-  it('should return the default directory for an unknown endpointType', () => {
-    const formData = {};
-    const result = getURIDirectory(formData, 'unknown');
-    expect(result).toBe('/superset/explore');
+  it('should throw an error if any token is not numeric', () => {
+    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
+    mockValidateNumber.mockImplementation(token => isNaN(parseFloat(token)));
+
+    expect(() => tokenizeToNumericArray('1,2,a')).toThrow('All values should be numeric');
+  });
+
+  it('should handle leading and trailing whitespace in tokens', () => {
+    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
+    mockValidateNumber.mockReturnValue(false);
+
+    expect(tokenizeToNumericArray(' 1 , 2 , 3 ')).toEqual([1, 2, 3]);
+  });
+
+  it('should handle a single numeric token', () => {
+    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
+    mockValidateNumber.mockReturnValue(false);
+
+    expect(tokenizeToNumericArray('42')).toEqual([42]);
+  });
+
+  it('should handle a single invalid token', () => {
+    const mockValidateNumber = jest.requireMock('@superset-ui/core').validateNumber;
+    mockValidateNumber.mockImplementation(token => isNaN(parseFloat(token)));
+
+    expect(() => tokenizeToNumericArray('a')).toThrow('All values should be numeric');
   });
 });
