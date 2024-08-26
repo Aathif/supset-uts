@@ -1,64 +1,50 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import ExtraControls from './path_to_ExtraControls';
-import { useExtraControl } from './path_to_useExtraControl';
+import { render, screen } from '@testing-library/react';
+import Slider, { SliderSingleProps, SliderRangeProps } from './Slider';
+import AntdSlider from 'antd/lib/slider';
 
-// Mock useExtraControl hook
-jest.mock('./path_to_useExtraControl', () => ({
-  useExtraControl: jest.fn(),
-}));
+jest.mock('antd/lib/slider', () => jest.fn((props) => <div data-testid="antd-slider" {...props} />));
 
-describe('ExtraControls component', () => {
-  const mockSetControlValue = jest.fn();
-
-  beforeEach(() => {
+describe('Slider component', () => {
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should render null if showExtraControls is false', () => {
-    const formData = { showExtraControls: false, stack: null, area: false };
-
-    render(<ExtraControls formData={formData} setControlValue={mockSetControlValue} />);
-
-    expect(screen.queryByRole('radiogroup')).toBeNull();
+  it('renders the Slider component', () => {
+    render(<Slider min={0} max={100} />);
+    const slider = screen.getByTestId('antd-slider');
+    expect(slider).toBeInTheDocument();
   });
 
-  it('should render extra controls if showExtraControls is true', () => {
-    const formData = { showExtraControls: true, stack: null, area: false };
-    const mockOptions = [{ label: 'Option 1', value: 'option1' }];
-    const mockHandler = jest.fn();
-    const mockValue = 'option1';
+  it('passes props to AntdSlider', () => {
+    const props: SliderSingleProps = {
+      min: 0,
+      max: 100,
+      defaultValue: 50,
+    };
 
-    useExtraControl.mockReturnValue({
-      extraControlsOptions: mockOptions,
-      extraControlsHandler: mockHandler,
-      extraValue: mockValue,
-    });
+    render(<Slider {...props} />);
+    const slider = screen.getByTestId('antd-slider');
 
-    render(<ExtraControls formData={formData} setControlValue={mockSetControlValue} />);
-
-    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
-    expect(screen.getByLabelText('Option 1')).toBeInTheDocument();
-    expect(screen.getByLabelText('Option 1')).toBeChecked();
+    expect(slider).toHaveAttribute('min', '0');
+    expect(slider).toHaveAttribute('max', '100');
+    expect(slider).toHaveAttribute('defaultValue', '50');
   });
 
-  it('should call the handler when an option is changed', () => {
-    const formData = { showExtraControls: true, stack: null, area: false };
-    const mockOptions = [{ label: 'Option 1', value: 'option1' }];
-    const mockHandler = jest.fn();
-    const mockValue = 'option1';
+  it('renders a range slider with SliderRangeProps', () => {
+    const rangeProps: SliderRangeProps = {
+      range: true,
+      min: 0,
+      max: 100,
+      defaultValue: [20, 80],
+    };
 
-    useExtraControl.mockReturnValue({
-      extraControlsOptions: mockOptions,
-      extraControlsHandler: mockHandler,
-      extraValue: mockValue,
-    });
+    render(<Slider {...rangeProps} />);
+    const slider = screen.getByTestId('antd-slider');
 
-    render(<ExtraControls formData={formData} setControlValue={mockSetControlValue} />);
-
-    const radioButton = screen.getByLabelText('Option 1');
-    fireEvent.click(radioButton);
-
-    expect(mockHandler).toHaveBeenCalled();
+    expect(slider).toHaveAttribute('range', 'true');
+    expect(slider).toHaveAttribute('min', '0');
+    expect(slider).toHaveAttribute('max', '100');
+    expect(slider).toHaveAttribute('defaultValue', '20,80');
   });
 });
