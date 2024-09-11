@@ -3,13 +3,13 @@ import getScrollBarSize from './getScrollBarSize';
 
 describe('getScrollBarSize', () => {
     let originalBodyAppend;
-    let originalClientWidth;
+    let clientWidthGetter;
 
     beforeEach(() => {
         // Save original methods before mocking
         originalBodyAppend = document.body.append;
-        originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
-        
+        clientWidthGetter = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth').get;
+
         // Mock body.append to prevent actual DOM manipulation
         document.body.append = jest.fn();
 
@@ -20,14 +20,16 @@ describe('getScrollBarSize', () => {
                     return 100; // Assume scrollbar size
                 }
                 return 120; // Assume outer div width
-            }
+            },
         });
     });
 
     afterEach(() => {
         // Restore original methods after each test
         document.body.append = originalBodyAppend;
-        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+            get: clientWidthGetter,
+        });
     });
 
     test('should return scrollbar size', () => {
@@ -54,7 +56,7 @@ describe('getScrollBarSize', () => {
                     return 90;
                 }
                 return 120;
-            }
+            },
         });
 
         const sizeAfter = getScrollBarSize(true); // Force refresh
