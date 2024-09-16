@@ -9,7 +9,7 @@ case
  else lower(l.action)
 end as action,
 l.user_id,
-u.user_name,
+u.username,
 u.created_on as user_registration_date,
 l.dashboard_id,
 d.dashboard_title,
