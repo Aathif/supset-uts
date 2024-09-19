@@ -1,9 +1,4 @@
-select d.id, d.dashboard_title, COUNT(logs.dashboard_id) AS "Access Count"
-from logs
-JOIN dashboards d ON logs.dashboard_id = d.id
-JOIN logs l on l.dashboard_id = d.id
-WHERE l.dashboard_id IS NOT NULL and l.action = 'ChartDataRestApi.data'
-GROUP BY d.id, d.dashboard_title;
+SELECT dashboard_id, COUNT(*) AS "Access Count" from logs WHERE dashboard_id IS NOT NULL and logs.action = 'ChartDataRestApi.data' GROUP BY dashboard_id;
 
 
 select id, dashboard_title FROM dashboards;
