@@ -1,75 +1,28 @@
-import transformProps from './transformProps';
-
-describe('transformProps', () => {
-  const mockChartProps = {
-    width: 800,
-    height: 600,
-    formData: {
-      colorScheme: 'blue',
-      treemapRatio: 1.618,
-      treeMapColorOptions: { someOption: true },
-      numberFormat: null,
-      metrics: ['metric1'],
-    },
-    queriesData: [{
-      data: [
-        { id: 'A', value: 100 },
-        { id: 'B', value: 200 },
-      ],
-    }],
-    datasource: {
-      metrics: [
-        {
-          metric_name: 'metric1',
-          d3format: '.2f',
-        },
-        {
-          metric_name: 'metric2',
-          d3format: '.3f',
-        },
-      ],
-    },
-  };
-
-  test('should correctly transform chart props with numberFormat from datasource metrics', () => {
-    const result = transformProps(mockChartProps);
-
-    expect(result).toEqual({
-      width: 800,
-      height: 600,
-      data: [
-        { id: 'A', value: 100 },
-        { id: 'B', value: 200 },
-      ],
-      colorScheme: 'blue',
-      numberFormat: '.2f', // Derived from the datasource's metric1 d3format
-      treemapRatio: 1.618,
-      treeMapColorOptions: { someOption: true },
-    });
-  });
-
-  test('should use formData numberFormat if available', () => {
-    const customChartProps = {
-      ...mockChartProps,
-      formData: {
-        ...mockChartProps.formData,
-        numberFormat: '.1%', // Custom number format
-      },
-    };
-
-    const result = transformProps(customChartProps);
-
-    expect(result.numberFormat).toBe('.1%'); // Should prioritize formData's numberFormat
-  });
-
-  test('should return default values when numberFormat is missing', () => {
-    const noMetricsChartProps = {
-      ...mockChartProps,
-      datasource: { metrics: [] },
-    };
-
-    const result = transformProps(noMetricsChartProps);
-
-    expect(result.numberFormat).toBe(null); // No numberFormat found
-  });
-});
+ import { t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
+ import transformProps from './transformProps';
+ import controlPanel from './controlPanel';
+ 
+ const metadata = new ChartMetadata({
+   category: t('Part of a Whole'),
+   credits: ['https://bl.ocks.org/mbostock/911ad09bdead40ec0061'],
+   description: t(
+     'Shows the composition of a dataset by segmenting a given rectangle as smaller rectangles with areas proportional to their value or contribution to the whole. Those rectangles may also, in turn, be further segmented hierarchically.',
+   ),
+  //  exampleGallery: [{ url: example1 }, { url: example2 }, { url: example3 }, { url: example4 }],
+   name: t('Treemap'),
+   tags: [t('Categorical'), t('Legacy'), t('Multi-Levels'), t('Percentages'), t('Proportional')],
+  //  thumbnail,
+   useLegacyApi: true,
+ });
+ 
+ export default class TreemapChartPlugin extends ChartPlugin {
+   constructor() {
+     super({
+       loadChart: () => import('./ReactTreemap.js'),
+       metadata,
+       transformProps,
+       controlPanel,
+     });
+   }
+ }
+ 
