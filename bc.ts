@@ -1,24 +1,75 @@
+import transformProps from './transformProps';
 
- export default function transformProps(chartProps) {
-  const { width, height, formData, queriesData } = chartProps;
-  const { colorScheme, treemapRatio, treeMapColorOptions } = formData;
-  let { numberFormat } = formData;
-
-  if (!numberFormat && chartProps.datasource && chartProps.datasource.metrics) {
-    chartProps.datasource.metrics.forEach(metric => {
-      if (metric.metric_name === chartProps.formData.metrics[0] && metric.d3format) {
-        numberFormat = metric.d3format;
-      }
-    });
-  }
-
-  return {
-    width,
-    height,
-    data: queriesData[0].data,
-    colorScheme,
-    numberFormat,
-    treemapRatio,
-    treeMapColorOptions,
+describe('transformProps', () => {
+  const mockChartProps = {
+    width: 800,
+    height: 600,
+    formData: {
+      colorScheme: 'blue',
+      treemapRatio: 1.618,
+      treeMapColorOptions: { someOption: true },
+      numberFormat: null,
+      metrics: ['metric1'],
+    },
+    queriesData: [{
+      data: [
+        { id: 'A', value: 100 },
+        { id: 'B', value: 200 },
+      ],
+    }],
+    datasource: {
+      metrics: [
+        {
+          metric_name: 'metric1',
+          d3format: '.2f',
+        },
+        {
+          metric_name: 'metric2',
+          d3format: '.3f',
+        },
+      ],
+    },
   };
-}
+
+  test('should correctly transform chart props with numberFormat from datasource metrics', () => {
+    const result = transformProps(mockChartProps);
+
+    expect(result).toEqual({
+      width: 800,
+      height: 600,
+      data: [
+        { id: 'A', value: 100 },
+        { id: 'B', value: 200 },
+      ],
+      colorScheme: 'blue',
+      numberFormat: '.2f', // Derived from the datasource's metric1 d3format
+      treemapRatio: 1.618,
+      treeMapColorOptions: { someOption: true },
+    });
+  });
+
+  test('should use formData numberFormat if available', () => {
+    const customChartProps = {
+      ...mockChartProps,
+      formData: {
+        ...mockChartProps.formData,
+        numberFormat: '.1%', // Custom number format
+      },
+    };
+
+    const result = transformProps(customChartProps);
+
+    expect(result.numberFormat).toBe('.1%'); // Should prioritize formData's numberFormat
+  });
+
+  test('should return default values when numberFormat is missing', () => {
+    const noMetricsChartProps = {
+      ...mockChartProps,
+      datasource: { metrics: [] },
+    };
+
+    const result = transformProps(noMetricsChartProps);
+
+    expect(result.numberFormat).toBe(null); // No numberFormat found
+  });
+});
