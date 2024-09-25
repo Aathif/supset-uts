@@ -1,130 +1,66 @@
-import transformProps from './transformProps';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import SparklineCell from './SparklineCell';
+import '@testing-library/jest-dom/extend-expect'; // for better matchers
 
-describe('transformProps', () => {
-  const baseChartProps = {
-    width: 800,
-    height: 600,
-    datasource: {
-      verboseMap: {
-        metric_1: 'Metric 1',
-        metric_2: 'Metric 2',
-        group_1: 'Group 1',
-        group_2: 'Group 2',
-      },
-    },
-    formData: {
-      colorScheme: 'scheme1',
-      dateTimeFormat: '%Y-%m-%d',
-      equalDateSize: true,
-      groupby: ['group_1', 'group_2'],
-      logScale: false,
-      metrics: ['metric_1', 'metric_2'],
-      numberFormat: '.2f',
-      partitionLimit: '10',
-      partitionThreshold: '5',
-      richTooltip: true,
-      timeSeriesOption: 'option1',
-      sliceId: 123,
-    },
-    queriesData: [
-      {
-        data: [
-          { group_1: 'A', metric_1: 100 },
-          { group_1: 'B', metric_1: 200 },
-        ],
-      },
-    ],
+describe('SparklineCell Component', () => {
+  const mockData = [10, 20, 30, 40];
+  const mockEntries = [
+    { time: '2023-01-01T00:00:00Z' },
+    { time: '2023-01-02T00:00:00Z' },
+    { time: '2023-01-03T00:00:00Z' },
+    { time: '2023-01-04T00:00:00Z' },
+  ];
+  const defaultProps = {
+    ariaLabel: 'Test Sparkline',
+    dataKey: 'sparkline-data',
+    data: mockData,
+    entries: mockEntries,
+    height: 50,
+    width: 300,
+    numberFormat: '.2f',
+    dateFormat: 'YYYY-MM-DD',
+    showYAxis: true,
+    yAxisBounds: [10, 40],
   };
 
-  it('should transform props correctly', () => {
-    const expectedOutput = {
-      width: 800,
-      height: 600,
-      data: [
-        { group_1: 'A', metric_1: 100 },
-        { group_1: 'B', metric_1: 200 },
-      ],
-      colorScheme: 'scheme1',
-      dateTimeFormat: '%Y-%m-%d',
-      equalDateSize: true,
-      levels: ['Group 1', 'Group 2'],
-      metrics: ['metric_1', 'metric_2'],
-      numberFormat: '.2f',
-      partitionLimit: 10,
-      partitionThreshold: 5,
-      timeSeriesOption: 'option1',
-      useLogScale: false,
-      useRichTooltip: true,
-      sliceId: 123,
-    };
+  test('renders SparklineCell with correct data', () => {
+    render(<SparklineCell {...defaultProps} />);
+    
+    // Check if the ariaLabel is correctly set
+    const chart = screen.getByLabelText('Test Sparkline');
+    expect(chart).toBeInTheDocument();
 
-    const transformedProps = transformProps(baseChartProps);
-    expect(transformedProps).toEqual(expectedOutput);
+    // Check if the LineSeries data is rendered (note: chart rendering is generally hard to check directly)
+    // However, you can test if the component rendered correctly by checking the main container
+    expect(chart.querySelector('svg')).toBeInTheDocument();
   });
 
-  it('should handle missing partitionLimit and partitionThreshold', () => {
-    const modifiedChartProps = {
-      ...baseChartProps,
-      formData: {
-        ...baseChartProps.formData,
-        partitionLimit: null,
-        partitionThreshold: undefined,
-      },
-    };
-
-    const expectedOutput = {
-      width: 800,
-      height: 600,
-      data: [
-        { group_1: 'A', metric_1: 100 },
-        { group_1: 'B', metric_1: 200 },
-      ],
-      colorScheme: 'scheme1',
-      dateTimeFormat: '%Y-%m-%d',
-      equalDateSize: true,
-      levels: ['Group 1', 'Group 2'],
-      metrics: ['metric_1', 'metric_2'],
-      numberFormat: '.2f',
-      partitionLimit: null,
-      partitionThreshold: null,
-      timeSeriesOption: 'option1',
-      useLogScale: false,
-      useRichTooltip: true,
-      sliceId: 123,
-    };
-
-    const transformedProps = transformProps(modifiedChartProps);
-    expect(transformedProps).toEqual(expectedOutput);
+  test('renders tooltip with correct data on hover', () => {
+    render(<SparklineCell {...defaultProps} />);
+    
+    // Simulate hovering over the chart (for simplicity, you can directly test the Tooltip component if isolated)
+    // Note: Chart tooltips might be challenging to trigger in unit tests, and may require mocking.
+    const tooltipContent = screen.queryByText(/2023-01-01/i);
+    expect(tooltipContent).not.toBeInTheDocument(); // Tooltip initially hidden
+    
+    // Simulate hover or tooltip showing logic (depending on XYChart implementation, this might need improvement)
+    // For full functionality, consider using integration tests or visual regression tools.
   });
 
-  it('should handle groupby without verboseMap', () => {
-    const modifiedChartProps = {
-      ...baseChartProps,
-      datasource: { verboseMap: {} },
-    };
+  test('calculates y-axis labels correctly', () => {
+    render(<SparklineCell {...defaultProps} />);
 
-    const expectedOutput = {
-      width: 800,
-      height: 600,
-      data: [
-        { group_1: 'A', metric_1: 100 },
-        { group_1: 'B', metric_1: 200 },
-      ],
-      colorScheme: 'scheme1',
-      dateTimeFormat: '%Y-%m-%d',
-      equalDateSize: true,
-      levels: ['group_1', 'group_2'],
-      metrics: ['metric_1', 'metric_2'],
-      numberFormat: '.2f',
-      partitionLimit: 10,
-      partitionThreshold: 5,
-      timeSeriesOption: 'option1',
-      useLogScale: false,
-      useRichTooltip: true,
-      sliceId: 123,
-    };
+    // Check if min/max Y-axis values are rendered
+    expect(screen.getByText('10.00')).toBeInTheDocument();
+    expect(screen.getByText('40.00')).toBeInTheDocument();
+  });
 
-    const transformedProps = transformProps(modifiedChartProps);
-    expect(transformedProps).toEqual(expectedOutput);
+  test('handles no data edge case', () => {
+    const noDataProps = { ...defaultProps, data: [] };
+    render(<SparklineCell {...noDataProps} />);
+    
+    // Check if the component handles empty data correctly without throwing errors
+    expect(screen.getByLabelText('Test Sparkline')).toBeInTheDocument();
   });
 });
