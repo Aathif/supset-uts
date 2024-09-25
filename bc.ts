@@ -1,28 +1,29 @@
- import { t, ChartMetadata, ChartPlugin } from '@superset-ui/core';
- import transformProps from './transformProps';
- import controlPanel from './controlPanel';
- 
- const metadata = new ChartMetadata({
-   category: t('Part of a Whole'),
-   credits: ['https://bl.ocks.org/mbostock/911ad09bdead40ec0061'],
-   description: t(
-     'Shows the composition of a dataset by segmenting a given rectangle as smaller rectangles with areas proportional to their value or contribution to the whole. Those rectangles may also, in turn, be further segmented hierarchically.',
-   ),
-  //  exampleGallery: [{ url: example1 }, { url: example2 }, { url: example3 }, { url: example4 }],
-   name: t('Treemap'),
-   tags: [t('Categorical'), t('Legacy'), t('Multi-Levels'), t('Percentages'), t('Proportional')],
-  //  thumbnail,
-   useLegacyApi: true,
- });
- 
- export default class TreemapChartPlugin extends ChartPlugin {
-   constructor() {
-     super({
-       loadChart: () => import('./ReactTreemap.js'),
-       metadata,
-       transformProps,
-       controlPanel,
-     });
-   }
- }
- 
+import TreemapChartPlugin from './TreemapChartPlugin';
+import transformProps from './transformProps';
+import controlPanel from './controlPanel';
+import { ChartMetadata } from '@superset-ui/core';
+
+describe('TreemapChartPlugin', () => {
+  test('should instantiate correctly', () => {
+    const plugin = new TreemapChartPlugin();
+
+    // Ensure it's an instance of ChartPlugin
+    expect(plugin).toBeInstanceOf(TreemapChartPlugin);
+
+    // Test that the metadata property is set up correctly
+    expect(plugin.metadata).toBeInstanceOf(ChartMetadata);
+    expect(plugin.metadata.name).toBe('Treemap');
+
+    // Test that transformProps and controlPanel are set up correctly
+    expect(plugin.transformProps).toBe(transformProps);
+    expect(plugin.controlPanel).toBe(controlPanel);
+  });
+
+  test('should load chart asynchronously', async () => {
+    const plugin = new TreemapChartPlugin();
+
+    // Test that the chart loading function works
+    const chartModule = await plugin.loadChart();
+    expect(chartModule).toBeDefined();
+  });
+});
