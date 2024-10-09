@@ -1,99 +1,81 @@
-import React from 'react';
-import { render, fireEvent, screen, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import GlobalFilter from './GlobalFilter';
-import { Row } from 'react-table';
+import React, { CSSProperties } from 'react';
 
-// Mock `useAsyncState` since it's not part of the test
-jest.mock('../utils/useAsyncState', () => {
-  return (initialValue: string, callback: (newValue: string) => void, delay: number) => {
-    const [state, setState] = React.useState(initialValue);
-    return [state, setState];
-  };
-});
+export interface PaginationProps {
+  pageCount: number; // number of pages
+  currentPage?: number; // index of current page, zero-based
+  maxPageItemCount?: number;
+  ellipsis?: string; // content for ellipsis item
+  onPageChange: (page: number) => void; // `page` is zero-based
+  style?: CSSProperties;
+}
 
-describe('GlobalFilter Component', () => {
-  const mockSetGlobalFilter = jest.fn();
-  const preGlobalFilteredRows: Row<any>[] = [
-    { id: 1, original: { name: 'Item 1' } },
-    { id: 2, original: { name: 'Item 2' } },
-  ];
+// first, ..., prev, current, next, ..., last
+const MINIMAL_PAGE_ITEM_COUNT = 7;
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+/**
+ * Generate numeric page items around current page.
+ *   - Always include first and last page
+ *   - Add ellipsis if needed
+ */
+export function generatePageItems(total: number, current: number, width: number) {
+  if (width < MINIMAL_PAGE_ITEM_COUNT) {
+    throw new Error(`Must allow at least ${MINIMAL_PAGE_ITEM_COUNT} page items`);
+  }
+  if (width % 2 === 0) {
+    throw new Error(`Must allow odd number of page items`);
+  }
+  if (total < width) {
+    return [...new Array(total).keys()];
+  }
+  const left = Math.max(0, Math.min(total - width, current - Math.floor(width / 2)));
+  const items: (string | number)[] = new Array(width);
+  for (let i = 0; i < width; i += 1) {
+    items[i] = i + left;
+  }
+  // replace non-ending items with placeholders
+  if (items[0] > 0) {
+    items[0] = 0;
+    items[1] = 'prev-more';
+  }
+  if (items[items.length - 1] < total - 1) {
+    items[items.length - 1] = total - 1;
+    items[items.length - 2] = 'next-more';
+  }
+  return items;
+}
 
-  it('renders with default search input', () => {
-    render(
-      <GlobalFilter
-        preGlobalFilteredRows={preGlobalFilteredRows}
-        filterValue=""
-        setGlobalFilter={mockSetGlobalFilter}
-      />
-    );
-
-    // Ensure that the default input is rendered
-    const inputElement = screen.getByPlaceholderText(/2 records.../);
-    expect(inputElement).toBeInTheDocument();
-  });
-
-  it('calls setGlobalFilter on input change', async () => {
-    render(
-      <GlobalFilter
-        preGlobalFilteredRows={preGlobalFilteredRows}
-        filterValue=""
-        setGlobalFilter={mockSetGlobalFilter}
-      />
-    );
-
-    const inputElement = screen.getByPlaceholderText(/2 records.../);
-    
-    // Simulate changing the input value
-    fireEvent.change(inputElement, { target: { value: 'Item' } });
-
-    // Wait for the filter to be applied
-    await waitFor(() => expect(mockSetGlobalFilter).toHaveBeenCalledWith('Item'));
-  });
-
-  it('resets global filter when input is cleared', async () => {
-    render(
-      <GlobalFilter
-        preGlobalFilteredRows={preGlobalFilteredRows}
-        filterValue=""
-        setGlobalFilter={mockSetGlobalFilter}
-      />
-    );
-
-    const inputElement = screen.getByPlaceholderText(/2 records.../);
-    
-    // Simulate changing the input value
-    fireEvent.change(inputElement, { target: { value: 'Item' } });
-
-    // Simulate clearing the input value
-    fireEvent.change(inputElement, { target: { value: '' } });
-
-    // Wait for the filter to be cleared
-    await waitFor(() => expect(mockSetGlobalFilter).toHaveBeenCalledWith(''));
-  });
-
-  it('renders with custom search input', () => {
-    const CustomSearchInput = ({ count, value, onChange }: any) => (
-      <div>
-        Custom Search ({count}) <input value={value} onChange={onChange} />
+export default React.memo(
+  React.forwardRef(function Pagination(
+    { style, pageCount, currentPage = 0, maxPageItemCount = 9, onPageChange }: PaginationProps,
+    ref: React.Ref<HTMLDivElement>,
+  ) {
+    const pageItems = generatePageItems(pageCount, currentPage, maxPageItemCount);
+    return (
+      <div ref={ref} className="dt-pagination" style={style}>
+        <ul className="pagination pagination-sm">
+          {pageItems.map(item =>
+            typeof item === 'number' ? (
+              // actual page number
+              <li key={item} className={currentPage === item ? 'active' : undefined}>
+                <a
+                  href={`#page-${item}`}
+                  role="button"
+                  onClick={e => {
+                    e.preventDefault();
+                    onPageChange(item);
+                  }}
+                >
+                  {item + 1}
+                </a>
+              </li>
+            ) : (
+              <li key={item} className="dt-pagination-ellipsis">
+                <span>…</span>
+              </li>
+            ),
+          )}
+        </ul>
       </div>
     );
-
-    render(
-      <GlobalFilter
-        preGlobalFilteredRows={preGlobalFilteredRows}
-        filterValue=""
-        setGlobalFilter={mockSetGlobalFilter}
-        searchInput={CustomSearchInput}
-      />
-    );
-
-    // Ensure that the custom search input is rendered
-    const customInput = screen.getByText(/Custom Search \(2\)/);
-    expect(customInput).toBeInTheDocument();
-  });
-});
+  }),
+);
