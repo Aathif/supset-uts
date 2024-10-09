@@ -1,121 +1,80 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import Chord from './Chord';
-import { getNumberFormatter, CategoricalColorNamespace } from '@superset-ui/core';
+import '@testing-library/jest-dom'; // for the "toBeInTheDocument" matcher
+import TimeTable from './TimeTable'; // Import the component to be tested
+import { scaleLinear } from 'd3-scale';
 
-// Mock D3
-jest.mock('d3', () => ({
-  select: jest.fn(() => ({
-    classed: jest.fn().mockReturnThis(),
-    append: jest.fn().mockReturnThis(),
-    attr: jest.fn().mockReturnThis(),
-    style: jest.fn().mockReturnThis(),
-    on: jest.fn().mockReturnThis(),
-    data: jest.fn().mockReturnThis(),
-    enter: jest.fn().mockReturnThis(),
-    selectAll: jest.fn().mockReturnThis(),
-    filter: jest.fn().mockReturnThis(),
-    remove: jest.fn().mockReturnThis(),
-    text: jest.fn().mockReturnThis(),
-  })),
-  svg: {
-    arc: jest.fn(() => ({
-      innerRadius: jest.fn().mockReturnThis(),
-      outerRadius: jest.fn().mockReturnThis(),
-    })),
-    chord: jest.fn(() => ({
-      radius: jest.fn().mockReturnThis(),
-    })),
-  },
-  layout: {
-    chord: jest.fn(() => ({
-      padding: jest.fn().mockReturnThis(),
-      sortSubgroups: jest.fn().mockReturnThis(),
-      sortChords: jest.fn().mockReturnThis(),
-      matrix: jest.fn().mockReturnThis(),
-      groups: [],
-      chords: [],
-    })),
-  },
-  descending: jest.fn(),
+// Mock external components
+jest.mock('src/components/TableView', () => () => <div>TableView Component</div>);
+jest.mock('src/utils/sortNumericValues', () => jest.fn());
+jest.mock('mustache', () => ({
+  render: jest.fn((url, context) => `${url}?metric=${context.metric.label || context.metric.metric_name}`),
+}));
+jest.mock('d3-scale', () => ({
+  scaleLinear: jest.fn(() => jest.fn(() => '#ca0020')), // Mock color scale
 }));
 
-// Mock @superset-ui/core
-jest.mock('@superset-ui/core', () => ({
-  getNumberFormatter: jest.fn(),
-  CategoricalColorNamespace: {
-    getScale: jest.fn(),
-  },
-}));
-
-describe('Chord Component', () => {
+describe('TimeTable Component', () => {
   const mockProps = {
+    className: 'mock-class',
+    height: 500,
     data: {
-      matrix: [
-        [11975, 5871, 8916, 2868],
-        [1951, 10048, 2060, 6171],
-        [8010, 16145, 8090, 8045],
-        [1013, 990, 940, 6907],
-      ],
-      nodes: ['group1', 'group2', 'group3', 'group4'],
+      '2023-01-01 00:00:00': { 'SUM(metric_value)': 100 },
+      '2023-01-02 00:00:00': { 'SUM(metric_value)': 200 },
     },
-    width: 800,
-    height: 600,
-    colorScheme: 'schemeCategory10',
-    numberFormat: '.2f',
-    sliceId: 1,
+    columnConfigs: [
+      {
+        colType: 'spark',
+        key: 'SUM(metric_value)',
+        label: 'Metric Value',
+        timeLag: 1,
+        d3format: '.2f',
+        tooltip: 'Test Tooltip',
+      },
+    ],
+    rowType: 'metric',
+    rows: [{ metric_name: 'test_metric' }],
+    url: '/explore',
   };
 
-  beforeEach(() => {
-    // Reset all mocks before each test
-    jest.clearAllMocks();
-
-    // Mock the getNumberFormatter return value
-    getNumberFormatter.mockReturnValue(jest.fn(val => val.toFixed(2)));
-
-    // Mock the CategoricalColorNamespace.getScale return value
-    CategoricalColorNamespace.getScale.mockReturnValue(jest.fn(() => '#000000'));
-  });
-
   test('renders without crashing', () => {
-    render(<Chord {...mockProps} />);
-    expect(screen.getByRole('img')).toBeInTheDocument();
+    render(<TimeTable {...mockProps} />);
+    expect(screen.getByTestId('time-table')).toBeInTheDocument();
   });
 
-  test('calls d3.select with the correct element', () => {
-    render(<Chord {...mockProps} />);
-    expect(d3.select).toHaveBeenCalledWith(expect.any(HTMLDivElement));
+  test('displays correct columns and rows', () => {
+    render(<TimeTable {...mockProps} />);
+    
+    // Check that TableView is rendered
+    expect(screen.getByText('TableView Component')).toBeInTheDocument();
+
+    // Check that the column label is rendered correctly
+    expect(screen.getByText('Metric Value')).toBeInTheDocument();
+
+    // Check that the tooltip is rendered
+    const tooltip = screen.getByLabelText('tt-col-0');
+    expect(tooltip).toBeInTheDocument();
+    expect(tooltip).toHaveAttribute('aria-label', 'tt-col-0');
   });
 
-  test('sets up the SVG with correct dimensions', () => {
-    render(<Chord {...mockProps} />);
-    const d3SelectMock = d3.select();
-    expect(d3SelectMock.append).toHaveBeenCalledWith('svg');
-    expect(d3SelectMock.attr).toHaveBeenCalledWith('width', mockProps.width);
-    expect(d3SelectMock.attr).toHaveBeenCalledWith('height', mockProps.height);
+  test('renders sparkline cells with data', () => {
+    render(<TimeTable {...mockProps} />);
+
+    // Ensure the SparklineCell component is being rendered (mocked)
+    expect(screen.getByLabelText('spark-test_metric')).toBeInTheDocument();
   });
 
-  test('sets up the chord layout', () => {
-    render(<Chord {...mockProps} />);
-    expect(d3.layout.chord).toHaveBeenCalled();
-    const chordLayoutMock = d3.layout.chord();
-    expect(chordLayoutMock.matrix).toHaveBeenCalledWith(mockProps.data.matrix);
+  test('calls Mustache.render correctly for metric URL', () => {
+    render(<TimeTable {...mockProps} />);
+
+    // Check that Mustache.render has been called with the correct arguments
+    expect(Mustache.render).toHaveBeenCalledWith(mockProps.url, { metric: { metric_name: 'test_metric' } });
   });
 
-  test('creates the correct number of groups', () => {
-    render(<Chord {...mockProps} />);
-    const d3SelectMock = d3.select();
-    expect(d3SelectMock.selectAll).toHaveBeenCalledWith('.group');
-    expect(d3SelectMock.data).toHaveBeenCalled();
-  });
+  test('applies color bounds correctly', () => {
+    render(<TimeTable {...mockProps} />);
 
-  test('uses the correct color function', () => {
-    render(<Chord {...mockProps} />);
-    expect(CategoricalColorNamespace.getScale).toHaveBeenCalledWith(mockProps.colorScheme);
-  });
-
-  test('uses the correct number formatter', () => {
-    render(<Chord {...mockProps} />);
-    expect(getNumberFormatter).toHaveBeenCalledWith(mockProps.numberFormat);
+    // Ensure that the color scale is being applied based on bounds
+    expect(scaleLinear).toHaveBeenCalledWith([100, 150, 200]); // Example of domain calculation
   });
 });
