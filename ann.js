@@ -1,94 +1,54 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import $ from 'jquery';
-import PivotTable from './PivotTable'; // Adjust the import based on your file structure
+import { formatNumber } from '@superset-ui/core';
 
-jest.mock('datatables.net-bs', () => jest.fn());
-jest.mock('@superset-ui/core', () => ({
-  getTimeFormatter: jest.fn(() => jest.fn((date) => date)),
-  getTimeFormatterForGranularity: jest.fn(() => jest.fn((date) => date)),
-  smartDateFormatter: { id: 'smart_date' },
-}));
+function formatCellValue(
+  i: number,
+  cols: string[],
+  tdText: string,
+  columnFormats: any,
+  numberFormat: string,
+  dateRegex: RegExp,
+  dateFormatter: any,
+) {
+  const metric: string = cols[i];
+  const format: string = columnFormats[metric] || numberFormat || '.3s';
+  let textContent: string = tdText;
+  let sortAttributeValue: any = tdText;
 
-// Mock the utils
-jest.mock('./utils/formatCells', () => ({
-  formatCellValue: jest.fn((index, cols, textContent) => ({
-    textContent,
-    sortAttributeValue: textContent,
-  })),
-  formatDateCellValue: jest.fn((text, verboseMap, dateRegex, dateFormatter) => text),
-}));
+  function isNumeric(n: any) {
+    return !isNaN(parseFloat(n)) && isFinite(n);
+  }
 
-jest.mock('./utils/fixTableHeight', () => jest.fn());
+  if (!isNumeric(tdText)) {
+    textContent = tdText;
+  }  else if (parseFloat(tdText)) {
+    const parsedValue = parseFloat(tdText);
+    textContent = formatNumber(format, parsedValue);
+    sortAttributeValue = parsedValue;
+  } else {
+    const regexMatch = dateRegex.exec(tdText);
+    if (regexMatch) {
+      const date = new Date(parseFloat(regexMatch[1]));
+      textContent = dateFormatter(date);
+      sortAttributeValue = date;
+    } else if (tdText === 'null') {
+      textContent = '';
+      sortAttributeValue = Number.NEGATIVE_INFINITY;
+    }
+  }
 
-describe('PivotTable Component', () => {
-  const mockData = {
-    html: '<table><thead><tr><th>Header 1</th><th>Header 2</th></tr></thead><tbody><tr><td>Value 1</td><td>Value 2</td></tr></tbody></table>',
-    columns: ['Header 1', 'Header 2'],
-  };
+  return { textContent, sortAttributeValue };
+}
 
-  const props = {
-    data: mockData,
-    height: 400,
-    columnFormats: {},
-    numberFormat: '',
-    numGroups: 1,
-    verboseMap: {},
-    customizeBgCondition: [],
-    granularity: 'day',
-    dateFormat: '',
-    cellBgColor: 'yellow',
-    pageLength: 5,
-    includeSearch: true,
-    groupby: [],
-    columns: ['Header 1', 'Header 2'],
-    colsToHide: [],
-    orderByCols: [],
-  };
+function formatDateCellValue(text: string, verboseMap: any, dateRegex: RegExp, dateFormatter: any) {
+  const regexMatch = dateRegex.exec(text);
+  let cellValue;
+  if (regexMatch) {
+    const date = new Date(parseFloat(regexMatch[1]));
+    cellValue = dateFormatter(date);
+  } else {
+    cellValue = verboseMap[text] || text;
+  }
+  return cellValue;
+}
 
-  beforeEach(() => {
-    document.body.innerHTML = '<div id="pivot-table-container"></div>';
-  });
-
-  test('renders without crashing', () => {
-    render(<PivotTable {...props} element={document.getElementById('pivot-table-container')} />);
-    expect(screen.getByText('Header 1')).toBeInTheDocument();
-    expect(screen.getByText('Value 1')).toBeInTheDocument();
-  });
-
-  test('formats cells correctly', () => {
-    render(<PivotTable {...props} element={document.getElementById('pivot-table-container')} />);
-    expect(screen.getByText('Value 1')).toHaveAttribute('data-sort', 'Value 1');
-  });
-
-  test('sets container height and overflow for multiple groups', () => {
-    render(<PivotTable {...props} element={document.getElementById('pivot-table-container')} />);
-    const container = document.getElementById('pivot-table-container');
-    expect(container.style.overflow).toBe('auto');
-    expect(container.style.height).toBe('410px'); // height + 10
-  });
-
-  test('applies custom background color based on conditions', () => {
-    const customProps = {
-      ...props,
-      customizeBgCondition: [
-        { operator: '==', comparator: 'Value 1', subject: 'Header 1' },
-      ],
-    };
-    render(<PivotTable {...customProps} element={document.getElementById('pivot-table-container')} />);
-    const cell = screen.getByText('Value 1');
-    expect(cell).toHaveStyle('background-color:yellow');
-  });
-
-  test('initializes DataTable with correct options for single group', () => {
-    render(<PivotTable {...props} element={document.getElementById('pivot-table-container')} />);
-    expect($.fn.DataTable).toHaveBeenCalledWith(expect.objectContaining({
-      paging: props.pageLength,
-      searching: props.includeSearch,
-      scrollY: '400px',
-      scrollCollapse: true,
-      scrollX: true,
-      bSort: true,
-    }));
-  });
-});
+export { formatCellValue, formatDateCellValue };
