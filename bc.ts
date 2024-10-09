@@ -1,81 +1,73 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react';
-import Pagination from './Pagination'; // Adjust the import based on your file structure
+import { formatSelectOptions } from '@superset-ui/chart-controls';
 
-describe('Pagination Component', () => {
-  const mockOnPageChange = jest.fn();
+export type SizeOption = [number, string];
 
-  afterEach(() => {
-    jest.clearAllMocks(); // Clear mock calls after each test
-  });
+export interface SelectPageSizeRendererProps {
+  current: number;
+  options: SizeOption[];
+  onChange: SelectPageSizeProps['onChange'];
+}
 
-  test('renders without crashing', () => {
-    const { container } = render(
-      <Pagination 
-        pageCount={10} 
-        currentPage={0} 
-        onPageChange={mockOnPageChange} 
-      />
+function DefaultSelectRenderer({ current, options, onChange }: SelectPageSizeRendererProps) {
+  return (
+    <span className="dt-select-page-size form-inline">
+      Show{' '}
+      <select
+        className="form-control input-sm"
+        value={current}
+        onBlur={() => {}}
+        onChange={e => {
+          onChange(Number((e.target as HTMLSelectElement).value));
+        }}
+      >
+        {options.map(option => {
+          const [size, text] = Array.isArray(option) ? option : [option, option];
+          return (
+            <option key={size} value={size}>
+              {text}
+            </option>
+          );
+        })}
+      </select>{' '}
+      entries
+    </span>
+  );
+}
+
+export interface SelectPageSizeProps extends SelectPageSizeRendererProps {
+  total?: number;
+  selectRenderer?: typeof DefaultSelectRenderer;
+  onChange: (pageSize: number) => void;
+}
+
+function getOptionValue(x: SizeOption) {
+  return Array.isArray(x) ? x[0] : x;
+}
+
+export default React.memo(function SelectPageSize({
+  total,
+  options: sizeOptions,
+  current: currentSize,
+  selectRenderer,
+  onChange,
+}: SelectPageSizeProps) {
+  const sizeOptionValues = sizeOptions.map(getOptionValue);
+  let options = [...sizeOptions];
+  // insert current size to list
+  if (
+    currentSize !== undefined &&
+    (currentSize !== total || !sizeOptionValues.includes(0)) &&
+    !sizeOptionValues.includes(currentSize)
+  ) {
+    options = [...sizeOptions];
+    options.splice(
+      sizeOptionValues.findIndex(x => x > currentSize),
+      0,
+      formatSelectOptions([currentSize])[0],
     );
-    expect(container).toBeInTheDocument();
-  });
-
-  test('displays correct page items', () => {
-    const { getByText } = render(
-      <Pagination 
-        pageCount={10} 
-        currentPage={0} 
-        onPageChange={mockOnPageChange} 
-      />
-    );
-
-    expect(getByText('1')).toBeInTheDocument();
-    expect(getByText('2')).toBeInTheDocument();
-    expect(getByText('…')).toBeInTheDocument();
-    expect(getByText('10')).toBeInTheDocument();
-  });
-
-  test('handles page change on number click', () => {
-    const { getByText } = render(
-      <Pagination 
-        pageCount={10} 
-        currentPage={0} 
-        onPageChange={mockOnPageChange} 
-      />
-    );
-
-    fireEvent.click(getByText('2'));
-
-    expect(mockOnPageChange).toHaveBeenCalledWith(1); // 0-based index
-  });
-
-  test('handles page change on ellipsis click', () => {
-    const { getByText } = render(
-      <Pagination 
-        pageCount={10} 
-        currentPage={0} 
-        onPageChange={mockOnPageChange} 
-      />
-    );
-
-    // In this example, we assume clicking the ellipsis will not change the page
-    expect(mockOnPageChange).not.toHaveBeenCalled(); // No calls yet
-
-    fireEvent.click(getByText('…'));
-
-    expect(mockOnPageChange).not.toHaveBeenCalled(); // No calls for ellipsis
-  });
-
-  test('marks current page as active', () => {
-    const { getByText } = render(
-      <Pagination 
-        pageCount={10} 
-        currentPage={1} 
-        onPageChange={mockOnPageChange} 
-      />
-    );
-
-    const activePage = getByText('2');
-    expect(activePage.parentElement).toHaveClass('active'); // Check if parent <li> has 'active' class
-  });
+  }
+  const current = currentSize === undefined ? sizeOptionValues[0] : currentSize;
+  const SelectRenderer = selectRenderer || DefaultSelectRenderer;
+  return <SelectRenderer current={current} options={options} onChange={onChange} />;
 });
