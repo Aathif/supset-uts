@@ -1,47 +1,81 @@
-import { generatePageItems } from './path-to-generatePageItems'; // import your function here
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react';
+import Pagination from './Pagination'; // Adjust the import based on your file structure
 
-const MINIMAL_PAGE_ITEM_COUNT = 3; // Make sure to define this constant in your tests if it's not imported
+describe('Pagination Component', () => {
+  const mockOnPageChange = jest.fn();
 
-describe('generatePageItems', () => {
-  it('should throw an error if width is less than the minimal page item count', () => {
-    expect(() => generatePageItems(10, 1, MINIMAL_PAGE_ITEM_COUNT - 1)).toThrowError(
-      `Must allow at least ${MINIMAL_PAGE_ITEM_COUNT} page items`
+  afterEach(() => {
+    jest.clearAllMocks(); // Clear mock calls after each test
+  });
+
+  test('renders without crashing', () => {
+    const { container } = render(
+      <Pagination 
+        pageCount={10} 
+        currentPage={0} 
+        onPageChange={mockOnPageChange} 
+      />
     );
+    expect(container).toBeInTheDocument();
   });
 
-  it('should throw an error if width is an even number', () => {
-    expect(() => generatePageItems(10, 1, 4)).toThrowError(
-      'Must allow odd number of page items'
+  test('displays correct page items', () => {
+    const { getByText } = render(
+      <Pagination 
+        pageCount={10} 
+        currentPage={0} 
+        onPageChange={mockOnPageChange} 
+      />
     );
+
+    expect(getByText('1')).toBeInTheDocument();
+    expect(getByText('2')).toBeInTheDocument();
+    expect(getByText('…')).toBeInTheDocument();
+    expect(getByText('10')).toBeInTheDocument();
   });
 
-  it('should return an array of total length if total is less than width', () => {
-    const result = generatePageItems(3, 1, 5);
-    expect(result).toEqual([0, 1, 2]);
+  test('handles page change on number click', () => {
+    const { getByText } = render(
+      <Pagination 
+        pageCount={10} 
+        currentPage={0} 
+        onPageChange={mockOnPageChange} 
+      />
+    );
+
+    fireEvent.click(getByText('2'));
+
+    expect(mockOnPageChange).toHaveBeenCalledWith(1); // 0-based index
   });
 
-  it('should return correct pagination items when total is greater than width', () => {
-    const result = generatePageItems(10, 5, 5);
-    expect(result).toEqual([3, 4, 5, 6, 7]); // Example output based on current
+  test('handles page change on ellipsis click', () => {
+    const { getByText } = render(
+      <Pagination 
+        pageCount={10} 
+        currentPage={0} 
+        onPageChange={mockOnPageChange} 
+      />
+    );
+
+    // In this example, we assume clicking the ellipsis will not change the page
+    expect(mockOnPageChange).not.toHaveBeenCalled(); // No calls yet
+
+    fireEvent.click(getByText('…'));
+
+    expect(mockOnPageChange).not.toHaveBeenCalled(); // No calls for ellipsis
   });
 
-  it('should replace non-ending items with placeholders', () => {
-    const result = generatePageItems(10, 1, 5);
-    expect(result).toEqual([0, 'prev-more', 0, 1, 2]); // Example output with placeholders
-  });
+  test('marks current page as active', () => {
+    const { getByText } = render(
+      <Pagination 
+        pageCount={10} 
+        currentPage={1} 
+        onPageChange={mockOnPageChange} 
+      />
+    );
 
-  it('should replace the last item with next-more if it does not point to the last total', () => {
-    const result = generatePageItems(10, 9, 5);
-    expect(result).toEqual([7, 8, 9, 'next-more', 9]); // Example output with next-more
-  });
-
-  it('should return the correct items when near the start', () => {
-    const result = generatePageItems(10, 2, 5);
-    expect(result).toEqual([0, 1, 2, 3, 4]); // Output when current is near the start
-  });
-
-  it('should return the correct items when near the end', () => {
-    const result = generatePageItems(10, 8, 5);
-    expect(result).toEqual([6, 7, 8, 9, 9]); // Output when current is near the end
+    const activePage = getByText('2');
+    expect(activePage.parentElement).toHaveClass('active'); // Check if parent <li> has 'active' class
   });
 });
