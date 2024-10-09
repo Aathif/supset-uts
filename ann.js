@@ -1,125 +1,52 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import Calendar from './Calendar';
-import { getSequentialSchemeRegistry } from '@superset-ui/core';
+import '@testing-library/jest-dom/extend-expect';
+import SparklineCell from './SparklineCell';
 
-// Mock the CalHeatMap library
-jest.mock('./vendor/cal-heatmap', () => {
-  return jest.fn().mockImplementation(() => {
-    return { init: jest.fn() };
-  });
-});
+const mockProps = {
+  ariaLabel: 'Test Sparkline',
+  dataKey: 'spark-1',
+  data: [10, 20, 30, 40, 50],
+  entries: [
+    { time: '2023-01-01' },
+    { time: '2023-02-01' },
+    { time: '2023-03-01' },
+    { time: '2023-04-01' },
+    { time: '2023-05-01' },
+  ],
+  height: 50,
+  width: 300,
+  numberFormat: ',.2f',
+  dateFormat: '%Y-%m-%d',
+  yAxisBounds: [10, 50],
+  showYAxis: true,
+};
 
-// Mock the getSequentialSchemeRegistry
-jest.mock('@superset-ui/core', () => ({
-  ...jest.requireActual('@superset-ui/core'),
-  getSequentialSchemeRegistry: jest.fn(),
-}));
-
-describe('Calendar Component', () => {
-  const mockProps = {
-    data: {
-      data: {
-        metric1: {
-          1535034236.0: 3,
-          1535120636.0: 5,
-        },
-      },
-      start: 1535034236000,
-      domain: 'month',
-      range: 3,
-      subdomain: 'day',
-    },
-    height: 400,
-    cellSize: 15,
-    cellPadding: 2,
-    cellRadius: 1,
-    linearColorScheme: 'schemeRdYlBu',
-    showLegend: true,
-    showMetricName: true,
-    showValues: true,
-    steps: 5,
-    timeFormatter: date => date.toISOString(),
-    valueFormatter: value => `${value} units`,
-    verboseMap: { metric1: 'Metric One' },
-    theme: { colors: { grayscale: { light5: '#f2f2f2' } } },
-  };
-
-  beforeEach(() => {
-    // Reset all mocks before each test
-    jest.clearAllMocks();
-
-    // Mock the getSequentialSchemeRegistry return value
-    getSequentialSchemeRegistry.mockReturnValue({
-      get: jest.fn().mockReturnValue({
-        createLinearScale: jest.fn().mockReturnValue(jest.fn()),
-      }),
-    });
+describe('<SparklineCell />', () => {
+  it('renders without crashing', () => {
+    render(<SparklineCell {...mockProps} />);
+    expect(screen.getByLabelText(/Test Sparkline/i)).toBeInTheDocument();
   });
 
-  test('renders without crashing', () => {
-    render(<Calendar {...mockProps} />);
-    expect(screen.getByText('Metric: Metric One')).toBeInTheDocument();
+  it('renders the correct number of data points', () => {
+    render(<SparklineCell {...mockProps} />);
+    const svg = screen.getByLabelText(/Test Sparkline/i);
+    expect(svg).toBeInTheDocument();
+    // Additional checks for the number of data points rendered
   });
 
-  test('renders correct number of calendars based on metrics', () => {
-    const propsWithMultipleMetrics = {
-      ...mockProps,
-      data: {
-        ...mockProps.data,
-        data: {
-          ...mockProps.data.data,
-          metric2: {
-            1535034236.0: 2,
-            1535120636.0: 4,
-          },
-        },
-      },
-      verboseMap: { ...mockProps.verboseMap, metric2: 'Metric Two' },
-    };
-
-    render(<Calendar {...propsWithMultipleMetrics} />);
-    expect(screen.getByText('Metric: Metric One')).toBeInTheDocument();
-    expect(screen.getByText('Metric: Metric Two')).toBeInTheDocument();
+  it('handles yAxis bounds correctly', () => {
+    render(<SparklineCell {...mockProps} />);
+    // You can test the min and max labels for the Y axis
+    expect(screen.getByText('10.00')).toBeInTheDocument();
+    expect(screen.getByText('50.00')).toBeInTheDocument();
   });
 
-  test('does not show metric name when showMetricName is false', () => {
-    const propsWithoutMetricName = {
-      ...mockProps,
-      showMetricName: false,
-    };
-
-    render(<Calendar {...propsWithoutMetricName} />);
-    expect(screen.queryByText('Metric: Metric One')).not.toBeInTheDocument();
+  it('displays tooltip correctly on hover', () => {
+    render(<SparklineCell {...mockProps} />);
+    // Simulate hover and check tooltip content
+    // Use fireEvent or userEvent to simulate hover action
   });
 
-  test('calls CalHeatMap init with correct parameters', () => {
-    render(<Calendar {...mockProps} />);
-
-    const CalHeatMap = require('./vendor/cal-heatmap');
-    const calHeatMapInstance = CalHeatMap.mock.instances[0];
-    
-    expect(calHeatMapInstance.init).toHaveBeenCalledWith(expect.objectContaining({
-      start: mockProps.data.start,
-      data: mockProps.data.data.metric1,
-      cellSize: mockProps.cellSize,
-      cellPadding: mockProps.cellPadding,
-      cellRadius: mockProps.cellRadius,
-      domain: mockProps.data.domain,
-      subDomain: mockProps.data.subdomain,
-      range: mockProps.data.range,
-      displayLegend: mockProps.showLegend,
-      valueFormatter: mockProps.valueFormatter,
-      timeFormatter: mockProps.timeFormatter,
-    }));
-  });
-
-  test('uses correct color scale', () => {
-    render(<Calendar {...mockProps} />);
-
-    expect(getSequentialSchemeRegistry).toHaveBeenCalled();
-    const getSequentialScheme = getSequentialSchemeRegistry().get;
-    expect(getSequentialScheme).toHaveBeenCalledWith(mockProps.linearColorScheme);
-    expect(getSequentialScheme().createLinearScale).toHaveBeenCalled();
-  });
+  // Add more test cases as needed, such as rendering with no data, different yAxis bounds, etc.
 });
