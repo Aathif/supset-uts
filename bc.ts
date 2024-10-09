@@ -1,73 +1,70 @@
 import React from 'react';
-import { formatSelectOptions } from '@superset-ui/chart-controls';
+import { render, screen, fireEvent } from '@testing-library/react';
+import SelectPageSize, { SizeOption } from './path-to-SelectPageSize'; // Adjust the import path as necessary
 
-export type SizeOption = [number, string];
+describe('SelectPageSize Component', () => {
+  const mockOnChange = jest.fn();
 
-export interface SelectPageSizeRendererProps {
-  current: number;
-  options: SizeOption[];
-  onChange: SelectPageSizeProps['onChange'];
-}
+  const defaultProps = {
+    options: [[5, '5 entries'], [10, '10 entries'], [20, '20 entries']],
+    current: 10,
+    total: 30,
+    onChange: mockOnChange,
+  };
 
-function DefaultSelectRenderer({ current, options, onChange }: SelectPageSizeRendererProps) {
-  return (
-    <span className="dt-select-page-size form-inline">
-      Show{' '}
-      <select
-        className="form-control input-sm"
-        value={current}
-        onBlur={() => {}}
-        onChange={e => {
-          onChange(Number((e.target as HTMLSelectElement).value));
-        }}
-      >
-        {options.map(option => {
-          const [size, text] = Array.isArray(option) ? option : [option, option];
-          return (
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders without crashing', () => {
+    render(<SelectPageSize {...defaultProps} />);
+    expect(screen.getByText(/Show/)).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  it('displays the current selected option', () => {
+    render(<SelectPageSize {...defaultProps} />);
+    expect(screen.getByRole('combobox')).toHaveValue('10');
+  });
+
+  it('calls onChange when a new option is selected', () => {
+    render(<SelectPageSize {...defaultProps} />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '5' } });
+    expect(mockOnChange).toHaveBeenCalledWith(5);
+  });
+
+  it('inserts current size into options if not present', () => {
+    const customProps = {
+      ...defaultProps,
+      current: 15,
+    };
+
+    render(<SelectPageSize {...customProps} />);
+    expect(screen.getByRole('combobox')).toHaveTextContent('15');
+    expect(screen.getByText('15')).toBeInTheDocument();
+  });
+
+  it('uses custom renderer if provided', () => {
+    const CustomRenderer = ({ current, options, onChange }: any) => (
+      <div>
+        <span>{`Custom: ${current}`}</span>
+        <select onChange={(e) => onChange(Number(e.target.value))}>
+          {options.map(([size, text]) => (
             <option key={size} value={size}>
               {text}
             </option>
-          );
-        })}
-      </select>{' '}
-      entries
-    </span>
-  );
-}
-
-export interface SelectPageSizeProps extends SelectPageSizeRendererProps {
-  total?: number;
-  selectRenderer?: typeof DefaultSelectRenderer;
-  onChange: (pageSize: number) => void;
-}
-
-function getOptionValue(x: SizeOption) {
-  return Array.isArray(x) ? x[0] : x;
-}
-
-export default React.memo(function SelectPageSize({
-  total,
-  options: sizeOptions,
-  current: currentSize,
-  selectRenderer,
-  onChange,
-}: SelectPageSizeProps) {
-  const sizeOptionValues = sizeOptions.map(getOptionValue);
-  let options = [...sizeOptions];
-  // insert current size to list
-  if (
-    currentSize !== undefined &&
-    (currentSize !== total || !sizeOptionValues.includes(0)) &&
-    !sizeOptionValues.includes(currentSize)
-  ) {
-    options = [...sizeOptions];
-    options.splice(
-      sizeOptionValues.findIndex(x => x > currentSize),
-      0,
-      formatSelectOptions([currentSize])[0],
+          ))}
+        </select>
+      </div>
     );
-  }
-  const current = currentSize === undefined ? sizeOptionValues[0] : currentSize;
-  const SelectRenderer = selectRenderer || DefaultSelectRenderer;
-  return <SelectRenderer current={current} options={options} onChange={onChange} />;
+
+    const customProps = {
+      ...defaultProps,
+      selectRenderer: CustomRenderer,
+    };
+
+    render(<SelectPageSize {...customProps} />);
+    expect(screen.getByText(/Custom:/)).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
 });
