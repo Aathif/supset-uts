@@ -1,82 +1,66 @@
-import { renderHook, act } from '@testing-library/react-hooks';
-import { useAsyncState } from './path-to-useAsyncState'; // import your hook here
-import { useAsyncDebounce } from 'some-debounce-library'; // mock the debounce function
+import React, { ComponentType, ChangeEventHandler } from 'react';
+import { Row, FilterValue } from 'react-table';
+import useAsyncState from '../utils/useAsyncState';
 
-jest.mock('some-debounce-library', () => ({
-  useAsyncDebounce: jest.fn((callback, wait) => {
-    return jest.fn((newValue) => setTimeout(() => callback(newValue), wait));
-  }),
-}));
+export interface SearchInputProps {
+  count: number;
+  value: string;
+  onChange: ChangeEventHandler<HTMLInputElement>;
+}
 
-describe('useAsyncState', () => {
-  it('should initialize with the initial value', () => {
-    const callback = jest.fn();
-    const { result } = renderHook(() => useAsyncState('initial', callback));
+export interface GlobalFilterProps<D extends object> {
+  preGlobalFilteredRows: Row<D>[];
+  // filter value cannot be `undefined` otherwise React will report component
+  // control type undefined error
+  filterValue: string;
+  setGlobalFilter: (filterValue: FilterValue) => void;
+  searchInput?: ComponentType<SearchInputProps>;
+}
 
-    // Initial value should be set
-    expect(result.current[0]).toBe('initial');
-  });
+function DefaultSearchInput({ count, value, onChange }: SearchInputProps) {
+  return (
+    <span className="dt-global-filter">
+      Search{' '}
+      <input
+        className="form-control input-sm"
+        placeholder={`${count} records...`}
+        value={value}
+        onChange={onChange}
+      />
+    </span>
+  );
+}
 
-  it('should update state and call the callback with debounce', async () => {
-    const callback = jest.fn();
-    const wait = 100;
-    const { result } = renderHook(() => useAsyncState('initial', callback, wait));
-
-    // Act to update the value
-    act(() => {
-      result.current[1]('new value'); // Calling setBoth('new value')
-    });
-
-    // State should update immediately
-    expect(result.current[0]).toBe('new value');
-
-    // Callback should not have been called yet (debounced)
-    expect(callback).not.toHaveBeenCalled();
-
-    // Fast forward the time to pass debounce delay
-    jest.advanceTimersByTime(wait);
-
-    // Now callback should be called
-    expect(callback).toHaveBeenCalledWith('new value');
-  });
-
-  it('should handle updates to the initial value', () => {
-    const callback = jest.fn();
-    const { result, rerender } = renderHook(
-      ({ initial }) => useAsyncState(initial, callback),
-      {
-        initialProps: { initial: 'initial' },
+export default (React.memo as <T>(fn: T) => T)(function GlobalFilter<D extends object>({
+  preGlobalFilteredRows,
+  filterValue = '',
+  searchInput,
+  setGlobalFilter,
+}: GlobalFilterProps<D>) {
+  const count = preGlobalFilteredRows.length;
+  const [value, setValue] = useAsyncState(
+    filterValue,
+    (newValue: string) => {
+      if (newValue == '') {
+        setGlobalFilter('');
+      } else {
+        setGlobalFilter(newValue || undefined);
       }
-    );
+    },
+    1000,
+  );
 
-    // Initially the value should be the initial one
-    expect(result.current[0]).toBe('initial');
+  const SearchInput = searchInput || DefaultSearchInput;
 
-    // Rerender with a new initial value
-    rerender({ initial: 'updated initial' });
-
-    // State should update to the new initial value
-    expect(result.current[0]).toBe('updated initial');
-  });
-
-  it('should not update the callback during debounce', () => {
-    const callback = jest.fn();
-    const wait = 200;
-    const { result } = renderHook(() => useAsyncState('initial', callback, wait));
-
-    act(() => {
-      result.current[1]('new value');
-      result.current[1]('newer value');
-    });
-
-    // State should reflect the latest value
-    expect(result.current[0]).toBe('newer value');
-
-    // Fast forward time
-    jest.advanceTimersByTime(wait);
-
-    // Callback should be called with the latest value only
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith('newer value');
-  });
+  return (
+    <SearchInput
+      count={count}
+      value={value}
+      onChange={e => {
+        const target = e.target as HTMLInputElement;
+        e.preventDefault();
+        setValue(target.value);
+      }}
+    />
+  );
 });
