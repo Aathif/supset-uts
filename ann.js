@@ -1,147 +1,120 @@
-// FilterBar.test.jsx
+// VerticalFilterBar.test.jsx
 import React from 'react';
-import { Provider } from 'react-redux';
-import { createMemoryHistory } from 'history';
 import { render, fireEvent, waitFor } from '@testing-library/react';
-import configureStore from 'redux-mock-store';
+import { createMemoryHistory } from 'history';
 import { Router } from 'react-router-dom';
-import FilterBar from './FilterBar'; // Adjust the import path accordingly
-import { updateDataMask, clearDataMask } from 'src/dataMask/actions';
-import { logEvent } from 'src/logger/actions';
-import { useSelector } from 'react-redux';
-import { SLOW_DEBOUNCE } from '@superset-ui/core';
+import VerticalFilterBar, { FilterBarScrollContext } from './VerticalFilterBar'; // Adjust the import path
+import { throttle } from 'lodash';
+import { FeatureFlag, isFeatureEnabled } from '@superset-ui/core';
 
-// Mocking actions
-jest.mock('src/dataMask/actions', () => ({
-  updateDataMask: jest.fn(),
-  clearDataMask: jest.fn(),
+// Mock dependencies
+jest.mock('lodash/throttle', () => jest.fn(fn => fn)); // Mock throttle to make tests easier
+jest.mock('src/components/Loading', () => () => <div>Loading...</div>);
+jest.mock('src/components/EmptyState', () => ({
+  EmptyStateSmall: () => <div>No global filters</div>,
+}));
+jest.mock('@superset-ui/core', () => ({
+  t: jest.fn(str => str),
+  isFeatureEnabled: jest.fn(),
+  FeatureFlag: { DashboardCrossFilters: 'DASHBOARD_CROSS_FILTERS' },
 }));
 
-jest.mock('src/logger/actions', () => ({
-  logEvent: jest.fn(),
-}));
-
-jest.mock('src/hooks/useTabId', () => ({
-  useTabId: jest.fn(() => 'testTabId'),
-}));
-
-jest.mock('src/dataMask/reducer', () => ({
-  getInitialDataMask: jest.fn(() => ({})),
-}));
-
-jest.mock('src/dashboard/util/extractUrlParams', () => ({
-  extractAllUrlParams: jest.fn(() => ({})),
-}));
-
-jest.mock('lodash/debounce', () => jest.fn(fn => fn));
-
-// Mock store setup
-const mockStore = configureStore([]);
-const initialState = {
-  dashboardInfo: {
-    id: 123,
-    metadata: {},
-    dash_edit_perm: true,
-  },
-  user: { userId: 1 },
-  nativeFilters: {
-    state: {},
-  },
-};
-
-// Helper function to render component with store
-const renderWithProvider = (component, store) => {
-  const history = createMemoryHistory();
-  return {
-    ...render(
-      <Provider store={store}>
-        <Router history={history}>{component}</Router>
-      </Provider>,
-    ),
-    history,
+// Test configuration
+const setup = (propsOverride = {}) => {
+  const props = {
+    actions: <div>Actions</div>,
+    canEdit: true,
+    dataMaskSelected: {},
+    filtersOpen: true,
+    filterValues: [],
+    height: 500,
+    isInitialized: true,
+    offset: 0,
+    onSelectionChange: jest.fn(),
+    toggleFiltersBar: jest.fn(),
+    width: 200,
+    setDataMaskSelected: jest.fn(),
+    ...propsOverride,
   };
+
+  const history = createMemoryHistory();
+  return render(
+    <Router history={history}>
+      <VerticalFilterBar {...props} />
+    </Router>,
+  );
 };
 
-describe('FilterBar component', () => {
-  let store;
-
+describe('VerticalFilterBar', () => {
   beforeEach(() => {
-    store = mockStore(initialState);
     jest.clearAllMocks();
   });
 
-  it('should render the FilterBar component without crashing', () => {
-    const { getByText } = renderWithProvider(<FilterBar />, store);
-    expect(getByText('Apply')).toBeInTheDocument();
-    expect(getByText('Clear All')).toBeInTheDocument();
+  it('should render without crashing', () => {
+    const { getByText } = setup();
+    expect(getByText('Actions')).toBeInTheDocument();
   });
 
-  it('should call updateDataMask on Apply button click', async () => {
-    const { getByText } = renderWithProvider(<FilterBar />, store);
-    
-    // Simulate Apply button click
-    fireEvent.click(getByText('Apply'));
+  it('should display "Loading" when not initialized', () => {
+    const { getByText } = setup({ isInitialized: false });
+    expect(getByText('Loading')).toBeInTheDocument();
+  });
 
+  it('should display "No global filters" when there are no filters and canEdit is true', () => {
+    const { getByText } = setup({ filterValues: [], canEdit: true });
+    expect(getByText('No global filters')).toBeInTheDocument();
+  });
+
+  it('should call toggleFiltersBar when CollapsedBar is clicked', () => {
+    const toggleFiltersBar = jest.fn();
+    const { getByTestId } = setup({
+      filtersOpen: false,
+      toggleFiltersBar,
+    });
+
+    fireEvent.click(getByTestId('expand-button'));
+    expect(toggleFiltersBar).toHaveBeenCalledWith(true);
+  });
+
+  it('should not display cross filters if the feature flag is disabled', () => {
+    isFeatureEnabled.mockReturnValue(false);
+    const { queryByText } = setup();
+
+    expect(queryByText('CrossFiltersVertical')).toBeNull();
+  });
+
+  it('should display cross filters if the feature flag is enabled', () => {
+    isFeatureEnabled.mockReturnValue(true);
+    const { getByText } = setup();
+
+    expect(getByText('CrossFiltersVertical')).toBeInTheDocument();
+  });
+
+  it('should handle scroll events and set isScrolling', async () => {
+    const { container } = setup();
+
+    fireEvent.scroll(container.querySelector('.open'));
     await waitFor(() => {
-      expect(updateDataMask).toHaveBeenCalled();
-      expect(logEvent).toHaveBeenCalledWith('LOG_ACTIONS_CHANGE_DASHBOARD_FILTER', {});
+      expect(throttle).toHaveBeenCalled();
     });
   });
 
-  it('should clear filters when Clear All button is clicked', async () => {
-    const { getByText } = renderWithProvider(<FilterBar />, store);
-
-    // Simulate Clear All button click
-    fireEvent.click(getByText('Clear All'));
-
-    await waitFor(() => {
-      expect(clearDataMask).toHaveBeenCalledTimes(1);
-    });
+  it('should render actions in the filter bar', () => {
+    const { getByText } = setup();
+    expect(getByText('Actions')).toBeInTheDocument();
   });
 
-  it('should not apply filters when isApplyDisabled is true', async () => {
-    const customState = {
-      ...initialState,
-      nativeFilters: {
-        state: {
-          isApplyDisabled: true,
-        },
-      },
-    };
-    const customStore = mockStore(customState);
-    const { getByText } = renderWithProvider(<FilterBar />, customStore);
+  it('should apply correct class names based on "filtersOpen" prop', () => {
+    const { container, rerender } = setup({ filtersOpen: false });
+    const collapsedBar = container.querySelector('.open');
+    expect(collapsedBar).toBeNull();
 
-    const applyButton = getByText('Apply');
-    expect(applyButton).toBeDisabled();
-  });
-
-  it('should update URL params on filter selection change', async () => {
-    const { history } = renderWithProvider(<FilterBar />, store);
-
-    // Simulate filter selection change
-    fireEvent.click(history.push, { pathname: '/superset/dashboard' });
-
-    await waitFor(() => {
-      expect(history.location.pathname).toBe('/superset/dashboard');
-    });
-  });
-
-  it('should initialize filters correctly', async () => {
-    const { getByText } = renderWithProvider(<FilterBar />, store);
-
-    await waitFor(() => {
-      expect(getByText('Apply')).toBeInTheDocument();
-    });
-  });
-
-  it('should handle default filter reset', async () => {
-    const { getByText } = renderWithProvider(<FilterBar />, store);
-
-    // Simulate Default Reset button click
-    fireEvent.click(getByText('Reset to default'));
-
-    await waitFor(() => {
-      expect(updateDataMask).toHaveBeenCalled();
-    });
+    rerender(
+      <Router history={createMemoryHistory()}>
+        <VerticalFilterBar filtersOpen />
+      </Router>,
+    );
+    const openedBar = container.querySelector('.open');
+    expect(openedBar).not.toBeNull();
   });
 });
