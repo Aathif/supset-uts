@@ -1,205 +1,105 @@
-import React, {
-    useEffect,
-    useState,
-} from 'react';
-import {
-    isNativeFilter,
-    t,
-    styled,
-    useTheme
-} from '@superset-ui/core';
-import Icons from 'src/components/Icons';
-import Button from 'src/components/Button';
+// FilterGroup.test.tsx
+import React from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { useDispatch, useSelector } from 'react-redux';
+import FilterGroup from './FilterGroup';
+import { addSuccessToast, addDangerToast } from 'src/components/MessageToasts/actions';
 import { setFilterGroupConfiguration } from 'src/dashboard/actions/nativeFilters';
 import { useFilters } from 'src/dashboard/components/nativeFilters/FilterBar/state';
-import { addSuccessToast, addDangerToast } from 'src/components/MessageToasts/actions';
-import { RootState } from 'src/dashboard/types';
-import { Tooltip } from 'src/components/Tooltip';
 import { Modal } from 'antd';
-import FormRow from 'src/components/FormRow';
-import SelectControl from 'src/explore/components/controls/SelectControl';
-import TextControl from 'src/explore/components/controls/TextControl';
-export type FiltersGroupProps = {
-    hideButton?: boolean;
-    groupFilterIndex?: any;
-    disableModal?: any;
-    deleteGrp?: any;
-}
 
-const FilterGroup: React.FC<FiltersGroupProps> = ({
-    hideButton,
-    groupFilterIndex,
-    disableModal,
-    deleteGrp
-}) => {
-    const metadata = useSelector<RootState, any>(
-        ({ dashboardInfo }) => dashboardInfo.metadata,
-      );
-    const theme = useTheme();
-    const dispatch = useDispatch();
-    const [formGroup, setFormGroup] = useState({name: '', filterIds: []});
-    const [group, setGroup] = useState(false);
-    const [isGroupEdit, setIsGroupEdit] = useState(false);
-    let filterArrIds : any = [];
-    metadata?.filter_groups && metadata?.filter_groups.map((obj:any) => filterArrIds.push(obj.filterIds));
-    let filterIds : any = [].concat(...filterArrIds);
-
-    const filters = useFilters();
-    const filterValues = Object.values(filters).filter(isNativeFilter);
-    const HeaderButton = styled(Button)`
-        padding: 0;
-    `;
-    useEffect(() => {
-        if (deleteGrp === true) {
-            deleteGroup(groupFilterIndex)
-        } else if (hideButton === true) {
-            addGroup(true, groupFilterIndex);
-        }
-    }, [hideButton, groupFilterIndex, deleteGrp])
-
-    const addGroup = (group = false, isEdit=false) => {
-        if (isEdit !== false && metadata?.filter_groups) {
-          let data = metadata?.filter_groups[isEdit as any];
-          setIsGroupEdit(isEdit);
-          if (Object.keys(data).length > 0) {
-            setFormGroup({name: data['name'], filterIds: data['filterIds']});
-            setGroup(group);
-          }
-        }
-        else if (isEdit === false) {
-          setGroup(group);
-          setFormGroup({name: '', filterIds: []});
-          setIsGroupEdit(false);
-          disableModal();
-        }
-    }
-
-    const deleteGroup = async (isEdit: any) => {
-        try {
-            if (isEdit !== false && metadata?.filter_groups) {
-                let data = metadata?.filter_groups[isEdit as any];
-                if ((Object.keys(data).length > 0) && data['filterIds']) {
-                    dispatch(await setFilterGroupConfiguration({}, isEdit, 'delete'));
-                    dispatch(addSuccessToast(t('Group deleted successfully')));
-                    disableModal();
-                }
-            }
-        } catch (error) {
-            dispatch(addDangerToast(t('There was an issue while deleting group. Please try again later')));
-        }
-    }
-
-    const addFilterGroup = (value : any, type : any) : any => {
-        let form = {...formGroup};
-        form[type] = value;
-        setFormGroup(form);
-    }
-
-    const saveGroup = async () => {
-        try {
-            let form = {...formGroup}
-            if (!form?.name) {
-                dispatch(addDangerToast(t('Please add group name')));
-                return false;
-            }
-            if (form?.filterIds.length === 0) {
-                dispatch(addDangerToast(t('Please add filters')));
-                return false;
-            }
-            dispatch(await setFilterGroupConfiguration(form, isGroupEdit, isGroupEdit === false ? 'create' : 'edit'));
-            addGroup(false);
-            if (isGroupEdit === false) {
-                dispatch(addSuccessToast(t('Group created successfully')));
-            } else {
-                dispatch(addSuccessToast(t('Group updated successfully')));
-            }
-            setIsGroupEdit(false);
-            setFormGroup({name: '', filterIds: []});
-            return true;
-        } catch (error) {
-            dispatch(addDangerToast(t('There was an issue while creating group. Please try again later')));
-            return false;
-        }
-    }
-    const getFilterOptions = () => {
-        let groupFitlerIds = [...filterIds];
-        if (isGroupEdit !== false && metadata?.filter_groups) {
-            let data = metadata?.filter_groups[isGroupEdit as any];
-            groupFitlerIds = filterIds.filter((ids: any) => !data['filterIds'].includes(ids));
-        }
-        return filterValues
-            .filter(val => !groupFitlerIds.includes(val.id))
-            .map(col => ({
-                value: col?.id,
-                label: col?.type === 'DIVIDER' ? col?.title : col?.name
-        }));
-    }
-    return (
-        filterValues.length > 0 && 
-        <>
-            {hideButton === false && 
-                <HeaderButton
-                    buttonStyle="link"
-                    buttonSize="xsmall"
-                    onClick={() => addGroup(true)}
-                >
-                    <Tooltip
-                    placement="right"
-                    style={{ cursor: 'pointer' }}
-                    title={'Add Group'}
-                    trigger={['hover']}
-                    >
-                    <Icons.Plus iconColor={(theme?.colors?.grayscale?.base || '#666666')} />
-                    </Tooltip>
-                </HeaderButton>
-            }
-            <Modal
-                    title="Group Filters"
-                    visible={group === true}
-                    onCancel={() => addGroup(false)}
-                    footer={[
-                        <Button
-                        buttonStyle="tertiary"
-                        buttonSize="small"
-                        onClick={() => addGroup(false)}
-                        >
-                        {t('Cancel')}
-                        </Button>,
-                        <Button
-                        buttonStyle="primary"
-                        htmlType="submit"
-                        buttonSize="small"
-                        onClick={saveGroup}
-                        >
-                        {t('Save')}
-                        </Button>
-                    ]}
-                >
-                <FormRow
-                    label={t('Group name')}
-                    control={
-                    <TextControl
-                        value={formGroup?.name}
-                        onChange={(e: any) => addFilterGroup(e, 'name')}
-                    />
-                    }
-                />
-                <FormRow
-                    label={t('Filters')}
-                    control={
-                    <SelectControl
-                        value={formGroup?.filterIds}
-                        name="Filters Ids"
-                        clearable={false}
-                        multi={true}
-                        options={getFilterOptions()}
-                        onChange={(e: any) => addFilterGroup(e, 'filterIds')}
-                    />
-                    }
-                />
-            </Modal>
-        </>
+// Mock necessary modules
+jest.mock('react-redux', () => ({
+  useDispatch: jest.fn(),
+  useSelector: jest.fn(),
+}));
+jest.mock('src/dashboard/actions/nativeFilters', () => ({
+  setFilterGroupConfiguration: jest.fn(),
+}));
+jest.mock('src/components/MessageToasts/actions', () => ({
+  addSuccessToast: jest.fn(),
+  addDangerToast: jest.fn(),
+}));
+jest.mock('src/dashboard/components/nativeFilters/FilterBar/state', () => ({
+  useFilters: jest.fn(),
+}));
+jest.mock('antd', () => ({
+  Modal: jest.fn(({ title, visible, onCancel, footer, children }) => (
+    visible && (
+      <div>
+        <h1>{title}</h1>
+        {children}
+        <button onClick={onCancel}>Cancel</button>
+        {footer}
+      </div>
     )
-};
-export default React.memo(FilterGroup);
+  )),
+}));
+
+const mockDispatch = jest.fn();
+
+describe('FilterGroup', () => {
+  beforeEach(() => {
+    (useDispatch as jest.Mock).mockReturnValue(mockDispatch);
+    (useSelector as jest.Mock).mockReturnValue({
+      dashboardInfo: { metadata: { filter_groups: [] } },
+    });
+    (useFilters as jest.Mock).mockReturnValue([]);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders without crashing', () => {
+    const { getByText } = render(<FilterGroup hideButton={false} />);
+    expect(getByText('Add Group')).toBeInTheDocument();
+  });
+
+  it('should open modal when Add Group button is clicked', () => {
+    const { getByText } = render(<FilterGroup hideButton={false} />);
+    const addButton = getByText('Add Group');
+    
+    fireEvent.click(addButton);
+    expect(getByText('Group Filters')).toBeInTheDocument();
+  });
+
+  it('should close modal when Cancel button is clicked', async () => {
+    const { getByText, queryByText } = render(<FilterGroup hideButton={false} />);
+    const addButton = getByText('Add Group');
+    
+    fireEvent.click(addButton);
+    expect(getByText('Group Filters')).toBeInTheDocument();
+    
+    fireEvent.click(getByText('Cancel'));
+    await waitFor(() => {
+      expect(queryByText('Group Filters')).toBeNull();
+    });
+  });
+
+  it('should dispatch success toast and save group when Save button is clicked', async () => {
+    const { getByText, getByLabelText } = render(<FilterGroup hideButton={false} />);
+    const addButton = getByText('Add Group');
+    
+    fireEvent.click(addButton);
+
+    fireEvent.change(getByLabelText('Group name'), { target: { value: 'Test Group' } });
+    fireEvent.click(getByText('Save'));
+
+    await waitFor(() => {
+      expect(addSuccessToast).toHaveBeenCalledWith('Group created successfully');
+    });
+  });
+
+  it('should show danger toast if no group name is provided on save', async () => {
+    const { getByText } = render(<FilterGroup hideButton={false} />);
+    const addButton = getByText('Add Group');
+    
+    fireEvent.click(addButton);
+    fireEvent.click(getByText('Save'));
+
+    await waitFor(() => {
+      expect(addDangerToast).toHaveBeenCalledWith('Please add group name');
+    });
+  });
+});
