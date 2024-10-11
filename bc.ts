@@ -1,109 +1,64 @@
-import transformProps from './path-to-your-transformProps'; // Adjust the import path as necessary
+import { computeStackedYDomain } from './computeStackedYDomain';
 
-describe('transformProps', () => {
-  it('should transform chartProps correctly', () => {
-    const chartProps = {
-      height: 400,
-      datasource: {
-        columnFormats: { column1: '.2f', column2: '.3s' },
-        verboseMap: { 'value1': 'Value 1', 'value2': 'Value 2' },
-      },
-      formData: {
-        timeGrainSqla: 'P1D',
-        groupby: ['column1'],
-        columns: ['column1', 'column2'],
-        numberFormat: '.2f',
-        dateFormat: 'MM/DD/YYYY',
-        customizeBgCondition: true,
-        cellBgColor: '#ff0000',
-        pageLength: 10,
-        includeSearch: false,
-        colsToHide: ['column2'],
-        orderByCols: ['column1'],
-      },
-      queriesData: [
-        {
-          data: [
-            { column1: 100, column2: 'data1' },
-            { column1: 200, column2: 'data2' },
-          ],
-        },
-      ],
-    };
-
-    const expectedOutput = {
-      columnFormats: { column1: '.2f', column2: '.3s' },
-      data: [
-        { column1: 100, column2: 'data1' },
-        { column1: 200, column2: 'data2' },
-      ],
-      dateFormat: 'MM/DD/YYYY',
-      granularity: 'P1D',
-      height: 400,
-      numberFormat: '.2f',
-      numGroups: 1, // Since groupby has one item
-      verboseMap: { 'value1': 'Value 1', 'value2': 'Value 2' },
-      customizeBgCondition: true,
-      cellBgColor: '#ff0000',
-      pageLength: 10,
-      includeSearch: false,
-      groupby: ['column1'],
-      columns: ['column1', 'column2'],
-      colsToHide: ['column2'],
-      orderByCols: ['column1'],
-    };
-
-    const result = transformProps(chartProps);
-    expect(result).toEqual(expectedOutput);
+describe('computeStackedYDomain', () => {
+  it('should return [0, 1] when data is empty', () => {
+    const data = [];
+    expect(computeStackedYDomain(data)).toEqual([0, 1]);
   });
 
-  it('should handle empty datasource and formData', () => {
-    const chartProps = {
-      height: 400,
-      datasource: {
-        columnFormats: {},
-        verboseMap: {},
-      },
-      formData: {
-        timeGrainSqla: '',
-        groupby: [],
-        columns: [],
-        numberFormat: '',
-        dateFormat: '',
-        customizeBgCondition: false,
-        cellBgColor: '',
-        pageLength: 0,
-        includeSearch: false,
-        colsToHide: [],
-        orderByCols: [],
-      },
-      queriesData: [
-        {
-          data: [],
-        },
-      ],
-    };
+  it('should return [0, 1] when data does not have "values" field', () => {
+    const data = [{ disabled: false }];
+    expect(computeStackedYDomain(data)).toEqual([0, 1]);
+  });
 
-    const expectedOutput = {
-      columnFormats: {},
-      data: [],
-      dateFormat: '',
-      granularity: '',
-      height: 400,
-      numberFormat: '',
-      numGroups: 0,
-      verboseMap: {},
-      customizeBgCondition: false,
-      cellBgColor: '',
-      pageLength: 0,
-      includeSearch: false,
-      groupby: [],
-      columns: [],
-      colsToHide: [],
-      orderByCols: [],
-    };
+  it('should return [0, 1] when all data series are disabled', () => {
+    const data = [
+      { disabled: true, values: [{ y: 10 }, { y: -5 }] },
+      { disabled: true, values: [{ y: 15 }, { y: -3 }] },
+    ];
+    expect(computeStackedYDomain(data)).toEqual([0, 1]);
+  });
 
-    const result = transformProps(chartProps);
-    expect(result).toEqual(expectedOutput);
+  it('should return correct domain when there is only one enabled series', () => {
+    const data = [
+      { disabled: true, values: [{ y: 10 }, { y: -5 }] },
+      { disabled: false, values: [{ y: 15 }, { y: -3 }] },
+    ];
+    expect(computeStackedYDomain(data)).toEqual([-5, 15]);
+  });
+
+  it('should return correct domain for stacked values', () => {
+    const data = [
+      { disabled: false, values: [{ y: 10 }, { y: -5 }] },
+      { disabled: false, values: [{ y: 15 }, { y: -3 }] },
+      { disabled: false, values: [{ y: -2 }, { y: 6 }] },
+    ];
+    // Stacked values: [10+15-2=23, -5-3+6=-2]
+    expect(computeStackedYDomain(data)).toEqual([-2, 23]);
+  });
+
+  it('should return correct domain when all values are positive', () => {
+    const data = [
+      { disabled: false, values: [{ y: 5 }, { y: 10 }] },
+      { disabled: false, values: [{ y: 8 }, { y: 12 }] },
+    ];
+    // Stacked values: [5+8=13, 10+12=22]
+    expect(computeStackedYDomain(data)).toEqual([0, 22]);
+  });
+
+  it('should return correct domain when all values are negative', () => {
+    const data = [
+      { disabled: false, values: [{ y: -10 }, { y: -5 }] },
+      { disabled: false, values: [{ y: -20 }, { y: -3 }] },
+    ];
+    // Stacked values: [-10-20=-30, -5-3=-8]
+    expect(computeStackedYDomain(data)).toEqual([-30, 0]);
+  });
+
+  it('should handle single data point correctly', () => {
+    const data = [
+      { disabled: false, values: [{ y: 7 }] },
+    ];
+    expect(computeStackedYDomain(data)).toEqual([0, 7]);
   });
 });
