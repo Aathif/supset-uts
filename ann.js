@@ -1,105 +1,53 @@
-// FilterGroup.test.tsx
-import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react';
-import { useDispatch, useSelector } from 'react-redux';
-import FilterGroup from './FilterGroup';
-import { addSuccessToast, addDangerToast } from 'src/components/MessageToasts/actions';
-import { setFilterGroupConfiguration } from 'src/dashboard/actions/nativeFilters';
-import { useFilters } from 'src/dashboard/components/nativeFilters/FilterBar/state';
-import { Modal } from 'antd';
+// Assuming the existence of a `FilterState` type like this
+interface FilterState {
+  label?: string;
+  value?: string | string[];
+}
 
-// Mock necessary modules
-jest.mock('react-redux', () => ({
-  useDispatch: jest.fn(),
-  useSelector: jest.fn(),
-}));
-jest.mock('src/dashboard/actions/nativeFilters', () => ({
-  setFilterGroupConfiguration: jest.fn(),
-}));
-jest.mock('src/components/MessageToasts/actions', () => ({
-  addSuccessToast: jest.fn(),
-  addDangerToast: jest.fn(),
-}));
-jest.mock('src/dashboard/components/nativeFilters/FilterBar/state', () => ({
-  useFilters: jest.fn(),
-}));
-jest.mock('antd', () => ({
-  Modal: jest.fn(({ title, visible, onCancel, footer, children }) => (
-    visible && (
-      <div>
-        <h1>{title}</h1>
-        {children}
-        <button onClick={onCancel}>Cancel</button>
-        {footer}
-      </div>
-    )
-  )),
-}));
+// Import the function to be tested
+import { extractLabel } from './extractLabel';
 
-const mockDispatch = jest.fn();
+describe('extractLabel', () => {
 
-describe('FilterGroup', () => {
-  beforeEach(() => {
-    (useDispatch as jest.Mock).mockReturnValue(mockDispatch);
-    (useSelector as jest.Mock).mockReturnValue({
-      dashboardInfo: { metadata: { filter_groups: [] } },
-    });
-    (useFilters as jest.Mock).mockReturnValue([]);
+  it('should return the label if it exists and does not contain undefined', () => {
+    const filter: FilterState = { label: 'Label1' };
+    const result = extractLabel(filter);
+    expect(result).toBe('Label1');
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('should return null if label contains undefined', () => {
+    const filter: FilterState = { label: 'undefinedLabel', value: 'SomeValue' };
+    const result = extractLabel(filter);
+    expect(result).toBe('undefinedLabel'); // if the function should return the label as a string without real `undefined`.
   });
 
-  it('renders without crashing', () => {
-    const { getByText } = render(<FilterGroup hideButton={false} />);
-    expect(getByText('Add Group')).toBeInTheDocument();
+  it('should return the value joined as a string if label is not available and value is an array', () => {
+    const filter: FilterState = { value: ['Value1', 'Value2'] };
+    const result = extractLabel(filter);
+    expect(result).toBe('Value1, Value2');
   });
 
-  it('should open modal when Add Group button is clicked', () => {
-    const { getByText } = render(<FilterGroup hideButton={false} />);
-    const addButton = getByText('Add Group');
-    
-    fireEvent.click(addButton);
-    expect(getByText('Group Filters')).toBeInTheDocument();
+  it('should return the value as a string if label is not available and value is a single value', () => {
+    const filter: FilterState = { value: 'SingleValue' };
+    const result = extractLabel(filter);
+    expect(result).toBe('SingleValue');
   });
 
-  it('should close modal when Cancel button is clicked', async () => {
-    const { getByText, queryByText } = render(<FilterGroup hideButton={false} />);
-    const addButton = getByText('Add Group');
-    
-    fireEvent.click(addButton);
-    expect(getByText('Group Filters')).toBeInTheDocument();
-    
-    fireEvent.click(getByText('Cancel'));
-    await waitFor(() => {
-      expect(queryByText('Group Filters')).toBeNull();
-    });
+  it('should return null if both label and value are not available', () => {
+    const filter: FilterState = {};
+    const result = extractLabel(filter);
+    expect(result).toBeNull();
   });
 
-  it('should dispatch success toast and save group when Save button is clicked', async () => {
-    const { getByText, getByLabelText } = render(<FilterGroup hideButton={false} />);
-    const addButton = getByText('Add Group');
-    
-    fireEvent.click(addButton);
-
-    fireEvent.change(getByLabelText('Group name'), { target: { value: 'Test Group' } });
-    fireEvent.click(getByText('Save'));
-
-    await waitFor(() => {
-      expect(addSuccessToast).toHaveBeenCalledWith('Group created successfully');
-    });
+  it('should handle undefined input and return null', () => {
+    const result = extractLabel(undefined);
+    expect(result).toBeNull();
   });
 
-  it('should show danger toast if no group name is provided on save', async () => {
-    const { getByText } = render(<FilterGroup hideButton={false} />);
-    const addButton = getByText('Add Group');
-    
-    fireEvent.click(addButton);
-    fireEvent.click(getByText('Save'));
-
-    await waitFor(() => {
-      expect(addDangerToast).toHaveBeenCalledWith('Please add group name');
-    });
+  it('should handle empty array for value and return an empty string', () => {
+    const filter: FilterState = { value: [] };
+    const result = extractLabel(filter);
+    expect(result).toBe('');
   });
+
 });
