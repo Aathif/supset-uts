@@ -1,197 +1,102 @@
-import { selectChartCrossFilters } from './yourFile'; // Adjust the path to the file
-import { getCrossFilterIndicator } from './yourFile'; // Adjust the path to the file
-import { getStatus } from './yourFile'; // Adjust the path to the file
-import { FeatureFlag, isFeatureEnabled } from '@superset-ui/core';
-import { IndicatorStatus } from './constants'; // Adjust based on your project's structure
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom/extend-expect';
+import { FilterCard } from './FilterCard';
+import { FilterCardContent } from './FilterCardContent';
 
-// Mock data
-const mockChartId = 123;
-const mockDataMask = {
-  1: { id: 1, filterState: { value: 'filterValue' } },
-};
-const mockDashboardLayout = {};
-const mockChartConfiguration = {
-  1: {
-    id: 1,
-    crossFilters: {
-      chartsInScope: [mockChartId],
-    },
-  },
-  2: {
-    id: 2,
-    crossFilters: {
-      chartsInScope: [],
-    },
-  },
-};
-const mockAppliedColumns = new Set(['col1']);
-const mockRejectedColumns = new Set(['col2']);
+// Mock props for testing
+const mockFilter = { id: 'filter-1', name: 'Sample Filter' };
+const mockGetPopupContainer = jest.fn(() => document.body);
 
-// Mock utility functions
-jest.mock('@superset-ui/core', () => ({
-  isFeatureEnabled: jest.fn(),
-  FeatureFlag: { DashboardCrossFilters: 'DASHBOARD_CROSS_FILTERS' },
-}));
-
-jest.mock('./yourFile', () => ({
-  getCrossFilterIndicator: jest.fn(),
-  getStatus: jest.fn(),
-}));
-
-const { isFeatureEnabled } = require('@superset-ui/core');
-const { getCrossFilterIndicator, getStatus } = require('./yourFile');
-
-describe('selectChartCrossFilters', () => {
-  beforeEach(() => {
-    // Clear mocks before each test
-    isFeatureEnabled.mockClear();
-    getCrossFilterIndicator.mockClear();
-    getStatus.mockClear();
+describe('FilterCard', () => {
+  it('should render children properly', () => {
+    render(
+      <FilterCard
+        filter={mockFilter}
+        isVisible={true}
+        getPopupContainer={mockGetPopupContainer}
+        placement="top"
+      >
+        <div>Child Content</div>
+      </FilterCard>,
+    );
+    
+    // Check if the child content is rendered
+    expect(screen.getByText('Child Content')).toBeInTheDocument();
   });
 
-  it('should return an empty array if cross-filters are not enabled', () => {
-    isFeatureEnabled.mockReturnValue(false);
-
-    const result = selectChartCrossFilters(
-      mockDataMask,
-      mockChartId,
-      mockDashboardLayout,
-      mockChartConfiguration,
-      mockAppliedColumns,
-      mockRejectedColumns,
+  it('should show and hide popover based on hover', () => {
+    render(
+      <FilterCard
+        filter={mockFilter}
+        isVisible={true}
+        getPopupContainer={mockGetPopupContainer}
+        placement="top"
+      >
+        <div>Hover over me</div>
+      </FilterCard>,
     );
 
-    expect(result).toEqual([]);
-    expect(getCrossFilterIndicator).not.toHaveBeenCalled();
-    expect(getStatus).not.toHaveBeenCalled();
+    // Initially, the popover should not be visible
+    expect(screen.queryByText('Sample Filter')).not.toBeInTheDocument();
+
+    // Hover over the child content to trigger popover
+    const childContent = screen.getByText('Hover over me');
+    fireEvent.mouseEnter(childContent);
+
+    // Now the popover should be visible
+    expect(screen.getByText('Sample Filter')).toBeInTheDocument();
+
+    // Move mouse away to hide the popover
+    fireEvent.mouseLeave(childContent);
+
+    // The popover should disappear
+    expect(screen.queryByText('Sample Filter')).not.toBeInTheDocument();
   });
 
-  it('should return cross-filter indicators when cross-filters are enabled', () => {
-    isFeatureEnabled.mockReturnValue(true);
-
-    const mockFilterIndicator = { column: 'col1', value: 'filterValue' };
-    getCrossFilterIndicator.mockReturnValue(mockFilterIndicator);
-
-    const mockStatus = IndicatorStatus.CrossFilterApplied;
-    getStatus.mockReturnValue(mockStatus);
-
-    const result = selectChartCrossFilters(
-      mockDataMask,
-      mockChartId,
-      mockDashboardLayout,
-      mockChartConfiguration,
-      mockAppliedColumns,
-      mockRejectedColumns,
+  it('should not show the popover when externalIsVisible is false', () => {
+    render(
+      <FilterCard
+        filter={mockFilter}
+        isVisible={false} // external visibility is false
+        getPopupContainer={mockGetPopupContainer}
+        placement="top"
+      >
+        <div>Hover over me</div>
+      </FilterCard>,
     );
 
-    expect(result).toEqual([{ ...mockFilterIndicator, status: mockStatus }]);
-    expect(getCrossFilterIndicator).toHaveBeenCalledWith(
-      1,
-      mockDataMask[1],
-      mockDashboardLayout,
-    );
-    expect(getStatus).toHaveBeenCalledWith({
-      label: 'filterValue',
-      column: 'col1',
-      type: 'CrossFilters',
-      appliedColumns: mockAppliedColumns,
-      rejectedColumns: mockRejectedColumns,
-    });
+    // Hover over the child content
+    const childContent = screen.getByText('Hover over me');
+    fireEvent.mouseEnter(childContent);
+
+    // Popover should not be visible because externalIsVisible is false
+    expect(screen.queryByText('Sample Filter')).not.toBeInTheDocument();
   });
 
-  it('should handle charts not in scope', () => {
-    isFeatureEnabled.mockReturnValue(true);
-
-    const result = selectChartCrossFilters(
-      mockDataMask,
-      mockChartId,
-      mockDashboardLayout,
-      { 2: mockChartConfiguration[2] }, // Pass a chartConfig with empty scope
-      mockAppliedColumns,
-      mockRejectedColumns,
+  it('should hide popover when hidePopover function is called', () => {
+    const { container } = render(
+      <FilterCard
+        filter={mockFilter}
+        isVisible={true}
+        getPopupContainer={mockGetPopupContainer}
+        placement="top"
+      >
+        <div>Hover over me</div>
+      </FilterCard>,
     );
 
-    expect(result).toEqual([]);
-    expect(getCrossFilterIndicator).not.toHaveBeenCalled();
-    expect(getStatus).not.toHaveBeenCalled();
-  });
+    // Hover to show the popover
+    fireEvent.mouseEnter(screen.getByText('Hover over me'));
+    expect(screen.getByText('Sample Filter')).toBeInTheDocument();
 
-  it('should return cross-filters only for non-filter emitters when filterEmitter is false', () => {
-    isFeatureEnabled.mockReturnValue(true);
+    // Find and click on the hide popover button in the popover content
+    const hideButton = container.querySelector('.filter-card-popover .ant-popover-close');
+    if (hideButton) {
+      fireEvent.click(hideButton);
+    }
 
-    const mockFilterIndicator = { column: 'col1', value: 'filterValue' };
-    getCrossFilterIndicator.mockReturnValue(mockFilterIndicator);
-
-    const mockStatus = IndicatorStatus.CrossFilterApplied;
-    getStatus.mockReturnValue(mockStatus);
-
-    const result = selectChartCrossFilters(
-      mockDataMask,
-      mockChartId,
-      mockDashboardLayout,
-      mockChartConfiguration,
-      mockAppliedColumns,
-      mockRejectedColumns,
-      false, // filterEmitter is false
-    );
-
-    expect(result).toEqual([{ ...mockFilterIndicator, status: mockStatus }]);
-    expect(getCrossFilterIndicator).toHaveBeenCalledWith(
-      1,
-      mockDataMask[1],
-      mockDashboardLayout,
-    );
-    expect(getStatus).toHaveBeenCalledWith({
-      label: 'filterValue',
-      column: 'col1',
-      type: 'CrossFilters',
-      appliedColumns: mockAppliedColumns,
-      rejectedColumns: mockRejectedColumns,
-    });
-  });
-
-  it('should return cross-filters only for filter emitters when filterEmitter is true', () => {
-    isFeatureEnabled.mockReturnValue(true);
-
-    const result = selectChartCrossFilters(
-      mockDataMask,
-      mockChartId,
-      mockDashboardLayout,
-      mockChartConfiguration,
-      mockAppliedColumns,
-      mockRejectedColumns,
-      true, // filterEmitter is true
-    );
-
-    expect(result).toEqual([]);
-    expect(getCrossFilterIndicator).not.toHaveBeenCalled();
-  });
-
-  it('should filter out indicators with non-applied statuses', () => {
-    isFeatureEnabled.mockReturnValue(true);
-
-    const mockFilterIndicator = { column: 'col1', value: 'filterValue' };
-    getCrossFilterIndicator.mockReturnValue(mockFilterIndicator);
-
-    const mockStatus = IndicatorStatus.CrossFilterRejected;
-    getStatus.mockReturnValue(mockStatus);
-
-    const result = selectChartCrossFilters(
-      mockDataMask,
-      mockChartId,
-      mockDashboardLayout,
-      mockChartConfiguration,
-      mockAppliedColumns,
-      mockRejectedColumns,
-    );
-
-    expect(result).toEqual([]);
-    expect(getStatus).toHaveBeenCalledWith({
-      label: 'filterValue',
-      column: 'col1',
-      type: 'CrossFilters',
-      appliedColumns: mockAppliedColumns,
-      rejectedColumns: mockRejectedColumns,
-    });
+    // Popover should be hidden after clicking close button
+    expect(screen.queryByText('Sample Filter')).not.toBeInTheDocument();
   });
 });
