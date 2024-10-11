@@ -1,32 +1,85 @@
-import { stringifyTimeRange } from './stringifyTimeRange';
+import { sortByMonth } from './sortByMonth';
 
-describe('stringifyTimeRange', () => {
-  it('should return null if any element in the extent does not have toISOString method', () => {
-    const extentWithInvalidDate = [new Date(), { notADate: true }];
-    expect(stringifyTimeRange(extentWithInvalidDate)).toBeNull();
+describe('sortByMonth', () => {
+  it('should sort in ascending order by default', () => {
+    const arr = [
+      { x: 'Jan-2023' },
+      { x: 'Mar-2023' },
+      { x: 'Feb-2023' },
+      { x: 'Apr-2022' },
+    ];
+    const sorted = sortByMonth(arr);
+    expect(sorted).toEqual([
+      { x: 'Apr-2022' },
+      { x: 'Jan-2023' },
+      { x: 'Feb-2023' },
+      { x: 'Mar-2023' },
+    ]);
   });
 
-  it('should return a string representation of the date range', () => {
-    const date1 = new Date('2024-01-01T00:00:00Z');
-    const date2 = new Date('2024-12-31T23:59:59Z');
-    const extent = [date1, date2];
-
-    expect(stringifyTimeRange(extent)).toBe('2024-01-01T00:00:00 : 2024-12-31T23:59:59');
+  it('should sort in descending order when specified', () => {
+    const arr = [
+      { x: 'Jan-2023' },
+      { x: 'Mar-2023' },
+      { x: 'Feb-2023' },
+      { x: 'Apr-2022' },
+    ];
+    const sorted = sortByMonth(arr, 'desc');
+    expect(sorted).toEqual([
+      { x: 'Mar-2023' },
+      { x: 'Feb-2023' },
+      { x: 'Jan-2023' },
+      { x: 'Apr-2022' },
+    ]);
   });
 
-  it('should handle an extent with the same date', () => {
-    const sameDate = new Date('2024-01-01T00:00:00Z');
-    const extent = [sameDate, sameDate];
-
-    expect(stringifyTimeRange(extent)).toBe('2024-01-01T00:00:00 : 2024-01-01T00:00:00');
+  it('should handle months in the same year correctly', () => {
+    const arr = [
+      { x: 'Feb-2023' },
+      { x: 'Jan-2023' },
+      { x: 'Mar-2023' },
+    ];
+    const sorted = sortByMonth(arr);
+    expect(sorted).toEqual([
+      { x: 'Jan-2023' },
+      { x: 'Feb-2023' },
+      { x: 'Mar-2023' },
+    ]);
   });
 
-  it('should return null for an empty extent', () => {
-    expect(stringifyTimeRange([])).toBeNull();
+  it('should handle months in the same year correctly in descending order', () => {
+    const arr = [
+      { x: 'Feb-2023' },
+      { x: 'Jan-2023' },
+      { x: 'Mar-2023' },
+    ];
+    const sorted = sortByMonth(arr, 'desc');
+    expect(sorted).toEqual([
+      { x: 'Mar-2023' },
+      { x: 'Feb-2023' },
+      { x: 'Jan-2023' },
+    ]);
   });
 
-  it('should return null if extent contains a non-date object', () => {
-    const extentWithNonDate = [new Date(), 'not a date'];
-    expect(stringifyTimeRange(extentWithNonDate)).toBeNull();
+  it('should sort correctly with mixed years', () => {
+    const arr = [
+      { x: 'Mar-2022' },
+      { x: 'Jan-2023' },
+      { x: 'Feb-2022' },
+      { x: 'Apr-2023' },
+    ];
+    const sorted = sortByMonth(arr);
+    expect(sorted).toEqual([
+      { x: 'Feb-2022' },
+      { x: 'Mar-2022' },
+      { x: 'Jan-2023' },
+      { x: 'Apr-2023' },
+    ]);
+  });
+
+  it('should handle an empty array', () => {
+    const arr = [];
+    const sorted = sortByMonth(arr);
+    expect(sorted).toEqual([]);
   });
 });
