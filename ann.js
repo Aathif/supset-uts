@@ -1,132 +1,197 @@
-import { selectIndicatorsForChart } from './yourFile'; // Adjust based on the file structure
+import { selectChartCrossFilters } from './yourFile'; // Adjust the path to the file
+import { getCrossFilterIndicator } from './yourFile'; // Adjust the path to the file
+import { getStatus } from './yourFile'; // Adjust the path to the file
+import { FeatureFlag, isFeatureEnabled } from '@superset-ui/core';
+import { IndicatorStatus } from './constants'; // Adjust based on your project's structure
 
-// Mock dependencies
-const mockChartId = 1;
-const mockFilters = {
-  2: { chartId: 2, datasourceId: 'ds_1' },
-  3: { chartId: 3, datasourceId: 'ds_2' },
+// Mock data
+const mockChartId = 123;
+const mockDataMask = {
+  1: { id: 1, filterState: { value: 'filterValue' } },
 };
-const mockDatasources = {
-  ds_1: { datasource_name: 'Datasource 1' },
-  ds_2: { datasource_name: 'Datasource 2' },
+const mockDashboardLayout = {};
+const mockChartConfiguration = {
+  1: {
+    id: 1,
+    crossFilters: {
+      chartsInScope: [mockChartId],
+    },
+  },
+  2: {
+    id: 2,
+    crossFilters: {
+      chartsInScope: [],
+    },
+  },
 };
-const mockChart = { id: 1 };
+const mockAppliedColumns = new Set(['col1']);
+const mockRejectedColumns = new Set(['col2']);
 
 // Mock utility functions
-jest.mock('./utils', () => ({
-  getAppliedColumns: jest.fn(),
-  getRejectedColumns: jest.fn(),
-  selectIndicatorsForChartFromFilter: jest.fn(),
-  areObjectsEqual: jest.fn(),
+jest.mock('@superset-ui/core', () => ({
+  isFeatureEnabled: jest.fn(),
+  FeatureFlag: { DashboardCrossFilters: 'DASHBOARD_CROSS_FILTERS' },
 }));
 
-// Mock caching objects
-let cachedIndicatorsForChart = {};
-let cachedDashboardFilterDataForChart = {};
+jest.mock('./yourFile', () => ({
+  getCrossFilterIndicator: jest.fn(),
+  getStatus: jest.fn(),
+}));
 
-// Utility mock implementations
-const { getAppliedColumns, getRejectedColumns, selectIndicatorsForChartFromFilter, areObjectsEqual } = require('./utils');
+const { isFeatureEnabled } = require('@superset-ui/core');
+const { getCrossFilterIndicator, getStatus } = require('./yourFile');
 
-describe('selectIndicatorsForChart', () => {
+describe('selectChartCrossFilters', () => {
   beforeEach(() => {
-    // Reset mocks before each test
-    cachedIndicatorsForChart = {};
-    cachedDashboardFilterDataForChart = {};
-    getAppliedColumns.mockClear();
-    getRejectedColumns.mockClear();
-    selectIndicatorsForChartFromFilter.mockClear();
-    areObjectsEqual.mockClear();
+    // Clear mocks before each test
+    isFeatureEnabled.mockClear();
+    getCrossFilterIndicator.mockClear();
+    getStatus.mockClear();
   });
 
-  it('should return cached indicators if data is unchanged', () => {
-    // Set up mock applied/rejected columns and matching filters/datasources
-    const mockAppliedColumns = ['col1'];
-    const mockRejectedColumns = ['col2'];
-    const mockMatchingFilters = [mockFilters[2]];
-    const mockMatchingDatasources = [mockDatasources['ds_1']];
-    cachedIndicatorsForChart[mockChartId] = [{ name: 'Mock Indicator' }];
-    cachedDashboardFilterDataForChart[mockChartId] = {
-      appliedColumns: mockAppliedColumns,
-      rejectedColumns: mockRejectedColumns,
-      matchingFilters: mockMatchingFilters,
-      matchingDatasources: mockMatchingDatasources,
-    };
+  it('should return an empty array if cross-filters are not enabled', () => {
+    isFeatureEnabled.mockReturnValue(false);
 
-    // Mock utility functions
-    getAppliedColumns.mockReturnValue(mockAppliedColumns);
-    getRejectedColumns.mockReturnValue(mockRejectedColumns);
-    areObjectsEqual.mockReturnValue(true);
-
-    const result = selectIndicatorsForChart(mockChartId, mockFilters, mockDatasources, mockChart);
-
-    expect(result).toEqual([{ name: 'Mock Indicator' }]);
-    expect(selectIndicatorsForChartFromFilter).not.toHaveBeenCalled();
-  });
-
-  it('should compute indicators and store them in cache if data is changed', () => {
-    const mockAppliedColumns = ['col1'];
-    const mockRejectedColumns = ['col2'];
-    const mockMatchingFilters = [mockFilters[2]];
-    const mockMatchingDatasources = [mockDatasources['ds_1']];
-    const mockIndicators = [{ name: 'Indicator 1' }, { name: 'Indicator 2' }];
-
-    getAppliedColumns.mockReturnValue(mockAppliedColumns);
-    getRejectedColumns.mockReturnValue(mockRejectedColumns);
-    selectIndicatorsForChartFromFilter.mockReturnValue(mockIndicators);
-    areObjectsEqual.mockReturnValueOnce(false);
-
-    const result = selectIndicatorsForChart(mockChartId, mockFilters, mockDatasources, mockChart);
-
-    expect(result).toEqual(mockIndicators);
-    expect(selectIndicatorsForChartFromFilter).toHaveBeenCalledWith(
+    const result = selectChartCrossFilters(
+      mockDataMask,
       mockChartId,
-      mockFilters[2],
-      mockDatasources[mockFilters[2].datasourceId],
+      mockDashboardLayout,
+      mockChartConfiguration,
       mockAppliedColumns,
       mockRejectedColumns,
     );
-    expect(cachedIndicatorsForChart[mockChartId]).toEqual(mockIndicators);
-    expect(cachedDashboardFilterDataForChart[mockChartId]).toEqual({
+
+    expect(result).toEqual([]);
+    expect(getCrossFilterIndicator).not.toHaveBeenCalled();
+    expect(getStatus).not.toHaveBeenCalled();
+  });
+
+  it('should return cross-filter indicators when cross-filters are enabled', () => {
+    isFeatureEnabled.mockReturnValue(true);
+
+    const mockFilterIndicator = { column: 'col1', value: 'filterValue' };
+    getCrossFilterIndicator.mockReturnValue(mockFilterIndicator);
+
+    const mockStatus = IndicatorStatus.CrossFilterApplied;
+    getStatus.mockReturnValue(mockStatus);
+
+    const result = selectChartCrossFilters(
+      mockDataMask,
+      mockChartId,
+      mockDashboardLayout,
+      mockChartConfiguration,
+      mockAppliedColumns,
+      mockRejectedColumns,
+    );
+
+    expect(result).toEqual([{ ...mockFilterIndicator, status: mockStatus }]);
+    expect(getCrossFilterIndicator).toHaveBeenCalledWith(
+      1,
+      mockDataMask[1],
+      mockDashboardLayout,
+    );
+    expect(getStatus).toHaveBeenCalledWith({
+      label: 'filterValue',
+      column: 'col1',
+      type: 'CrossFilters',
       appliedColumns: mockAppliedColumns,
       rejectedColumns: mockRejectedColumns,
-      matchingFilters: mockMatchingFilters,
-      matchingDatasources: mockMatchingDatasources,
     });
   });
 
-  it('should return an empty array if no matching filters are found', () => {
-    const result = selectIndicatorsForChart(mockChartId, {}, {}, mockChart);
+  it('should handle charts not in scope', () => {
+    isFeatureEnabled.mockReturnValue(true);
+
+    const result = selectChartCrossFilters(
+      mockDataMask,
+      mockChartId,
+      mockDashboardLayout,
+      { 2: mockChartConfiguration[2] }, // Pass a chartConfig with empty scope
+      mockAppliedColumns,
+      mockRejectedColumns,
+    );
 
     expect(result).toEqual([]);
-    expect(selectIndicatorsForChartFromFilter).not.toHaveBeenCalled();
+    expect(getCrossFilterIndicator).not.toHaveBeenCalled();
+    expect(getStatus).not.toHaveBeenCalled();
   });
 
-  it('should return an empty array if no datasources match the filters', () => {
-    const result = selectIndicatorsForChart(mockChartId, mockFilters, {}, mockChart);
+  it('should return cross-filters only for non-filter emitters when filterEmitter is false', () => {
+    isFeatureEnabled.mockReturnValue(true);
+
+    const mockFilterIndicator = { column: 'col1', value: 'filterValue' };
+    getCrossFilterIndicator.mockReturnValue(mockFilterIndicator);
+
+    const mockStatus = IndicatorStatus.CrossFilterApplied;
+    getStatus.mockReturnValue(mockStatus);
+
+    const result = selectChartCrossFilters(
+      mockDataMask,
+      mockChartId,
+      mockDashboardLayout,
+      mockChartConfiguration,
+      mockAppliedColumns,
+      mockRejectedColumns,
+      false, // filterEmitter is false
+    );
+
+    expect(result).toEqual([{ ...mockFilterIndicator, status: mockStatus }]);
+    expect(getCrossFilterIndicator).toHaveBeenCalledWith(
+      1,
+      mockDataMask[1],
+      mockDashboardLayout,
+    );
+    expect(getStatus).toHaveBeenCalledWith({
+      label: 'filterValue',
+      column: 'col1',
+      type: 'CrossFilters',
+      appliedColumns: mockAppliedColumns,
+      rejectedColumns: mockRejectedColumns,
+    });
+  });
+
+  it('should return cross-filters only for filter emitters when filterEmitter is true', () => {
+    isFeatureEnabled.mockReturnValue(true);
+
+    const result = selectChartCrossFilters(
+      mockDataMask,
+      mockChartId,
+      mockDashboardLayout,
+      mockChartConfiguration,
+      mockAppliedColumns,
+      mockRejectedColumns,
+      true, // filterEmitter is true
+    );
 
     expect(result).toEqual([]);
-    expect(selectIndicatorsForChartFromFilter).not.toHaveBeenCalled();
+    expect(getCrossFilterIndicator).not.toHaveBeenCalled();
   });
 
-  it('should handle empty filters and datasources gracefully', () => {
-    const result = selectIndicatorsForChart(mockChartId, {}, {}, mockChart);
+  it('should filter out indicators with non-applied statuses', () => {
+    isFeatureEnabled.mockReturnValue(true);
+
+    const mockFilterIndicator = { column: 'col1', value: 'filterValue' };
+    getCrossFilterIndicator.mockReturnValue(mockFilterIndicator);
+
+    const mockStatus = IndicatorStatus.CrossFilterRejected;
+    getStatus.mockReturnValue(mockStatus);
+
+    const result = selectChartCrossFilters(
+      mockDataMask,
+      mockChartId,
+      mockDashboardLayout,
+      mockChartConfiguration,
+      mockAppliedColumns,
+      mockRejectedColumns,
+    );
 
     expect(result).toEqual([]);
-    expect(selectIndicatorsForChartFromFilter).not.toHaveBeenCalled();
-  });
-
-  it('should sort the indicators by name', () => {
-    const mockAppliedColumns = ['col1'];
-    const mockRejectedColumns = ['col2'];
-    const unsortedIndicators = [{ name: 'Zebra' }, { name: 'Apple' }];
-
-    getAppliedColumns.mockReturnValue(mockAppliedColumns);
-    getRejectedColumns.mockReturnValue(mockRejectedColumns);
-    selectIndicatorsForChartFromFilter.mockReturnValue(unsortedIndicators);
-    areObjectsEqual.mockReturnValue(false);
-
-    const result = selectIndicatorsForChart(mockChartId, mockFilters, mockDatasources, mockChart);
-
-    expect(result).toEqual([{ name: 'Apple' }, { name: 'Zebra' }]);
+    expect(getStatus).toHaveBeenCalledWith({
+      label: 'filterValue',
+      column: 'col1',
+      type: 'CrossFilters',
+      appliedColumns: mockAppliedColumns,
+      rejectedColumns: mockRejectedColumns,
+    });
   });
 });
