@@ -1,22 +1,15 @@
-import { computeStackedYDomain } from './computeStackedYDomain';
+import * as d3 from 'd3';
+import { computeYDomain } from './computeYDomain';
 
-describe('computeStackedYDomain', () => {
+describe('computeYDomain', () => {
   it('should return [0, 1] when data is empty', () => {
     const data = [];
-    expect(computeStackedYDomain(data)).toEqual([0, 1]);
+    expect(computeYDomain(data)).toEqual([0, 1]);
   });
 
   it('should return [0, 1] when data does not have "values" field', () => {
     const data = [{ disabled: false }];
-    expect(computeStackedYDomain(data)).toEqual([0, 1]);
-  });
-
-  it('should return [0, 1] when all data series are disabled', () => {
-    const data = [
-      { disabled: true, values: [{ y: 10 }, { y: -5 }] },
-      { disabled: true, values: [{ y: 15 }, { y: -3 }] },
-    ];
-    expect(computeStackedYDomain(data)).toEqual([0, 1]);
+    expect(computeYDomain(data)).toEqual([0, 1]);
   });
 
   it('should return correct domain when there is only one enabled series', () => {
@@ -24,17 +17,7 @@ describe('computeStackedYDomain', () => {
       { disabled: true, values: [{ y: 10 }, { y: -5 }] },
       { disabled: false, values: [{ y: 15 }, { y: -3 }] },
     ];
-    expect(computeStackedYDomain(data)).toEqual([-5, 15]);
-  });
-
-  it('should return correct domain for stacked values', () => {
-    const data = [
-      { disabled: false, values: [{ y: 10 }, { y: -5 }] },
-      { disabled: false, values: [{ y: 15 }, { y: -3 }] },
-      { disabled: false, values: [{ y: -2 }, { y: 6 }] },
-    ];
-    // Stacked values: [10+15-2=23, -5-3+6=-2]
-    expect(computeStackedYDomain(data)).toEqual([-2, 23]);
+    expect(computeYDomain(data)).toEqual([-3, 15]);
   });
 
   it('should return correct domain when all values are positive', () => {
@@ -42,8 +25,7 @@ describe('computeStackedYDomain', () => {
       { disabled: false, values: [{ y: 5 }, { y: 10 }] },
       { disabled: false, values: [{ y: 8 }, { y: 12 }] },
     ];
-    // Stacked values: [5+8=13, 10+12=22]
-    expect(computeStackedYDomain(data)).toEqual([0, 22]);
+    expect(computeYDomain(data)).toEqual([5, 12]);
   });
 
   it('should return correct domain when all values are negative', () => {
@@ -51,14 +33,30 @@ describe('computeStackedYDomain', () => {
       { disabled: false, values: [{ y: -10 }, { y: -5 }] },
       { disabled: false, values: [{ y: -20 }, { y: -3 }] },
     ];
-    // Stacked values: [-10-20=-30, -5-3=-8]
-    expect(computeStackedYDomain(data)).toEqual([-30, 0]);
+    expect(computeYDomain(data)).toEqual([-20, -3]);
   });
 
-  it('should handle single data point correctly', () => {
+  it('should return correct domain for mixed positive and negative values', () => {
     const data = [
-      { disabled: false, values: [{ y: 7 }] },
+      { disabled: false, values: [{ y: 10 }, { y: -5 }] },
+      { disabled: false, values: [{ y: 15 }, { y: -3 }] },
     ];
-    expect(computeStackedYDomain(data)).toEqual([0, 7]);
+    expect(computeYDomain(data)).toEqual([-5, 15]);
+  });
+
+  it('should return correct domain for multiple series', () => {
+    const data = [
+      { disabled: false, values: [{ y: 10 }, { y: 20 }] },
+      { disabled: false, values: [{ y: 5 }, { y: 15 }] },
+    ];
+    expect(computeYDomain(data)).toEqual([5, 20]);
+  });
+
+  it('should ignore disabled series', () => {
+    const data = [
+      { disabled: true, values: [{ y: 100 }, { y: 200 }] },
+      { disabled: false, values: [{ y: 5 }, { y: 15 }] },
+    ];
+    expect(computeYDomain(data)).toEqual([5, 15]);
   });
 });
