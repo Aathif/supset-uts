@@ -51,4 +51,80 @@ jest.mock('d3', () => ({
 
 jest.mock('@superset-ui/core', () => ({
   getNumberFormatter: jest.fn(() => jest.fn(value => `${value}`)),
- 
+  CategoricalColorNamespace: {
+    getScale: jest.fn(() => jest.fn(() => 'color')),
+  },
+}));
+
+describe('Chord component', () => {
+  const props = {
+    data: {
+      nodes: ['A', 'B', 'C'],
+      matrix: [
+        [0, 1, 2],
+        [1, 0, 3],
+        [2, 3, 0],
+      ],
+    },
+    width: 500,
+    height: 500,
+    numberFormat: '0,0',
+    colorScheme: 'scheme1',
+    sliceId: 1,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should render the chord diagram with correct props', () => {
+    const element = document.createElement('div');
+
+    // Call the Chord function
+    Chord(element, props);
+
+    // Test d3 selection and classed setup
+    expect(d3.select).toHaveBeenCalledWith(element);
+    expect(d3.select(element).classed).toHaveBeenCalledWith(
+      'superset-legacy-chart-chord',
+      true,
+    );
+
+    // Test d3 arc and layout
+    expect(d3.svg.arc).toHaveBeenCalled();
+    expect(d3.svg.arc().innerRadius).toHaveBeenCalled();
+    expect(d3.svg.arc().outerRadius).toHaveBeenCalled();
+
+    // Test matrix layout setup
+    expect(d3.svg.layout.chord().matrix).toHaveBeenCalledWith(props.data.matrix);
+
+    // Ensure color function is called correctly
+    expect(CategoricalColorNamespace.getScale).toHaveBeenCalledWith(
+      props.colorScheme,
+    );
+  });
+
+  it('should handle mouseover events on groups', () => {
+    const element = document.createElement('div');
+
+    Chord(element, props);
+
+    // Simulate a mouseover event (mocked)
+    const mouseOverHandler = d3.select(element).append().on.mock.calls[0][1];
+    mouseOverHandler({}, 0);
+
+    expect(d3.select(element).selectAll().classed).toHaveBeenCalled();
+  });
+
+  it('should format numbers correctly using getNumberFormatter', () => {
+    const element = document.createElement('div');
+
+    Chord(element, props);
+
+    // Check that the number formatter was called for tooltips
+    const numberFormatter = getNumberFormatter();
+    expect(numberFormatter).toHaveBeenCalledWith(0);
+    expect(numberFormatter).toHaveBeenCalledWith(1);
+    expect(numberFormatter).toHaveBeenCalledWith(2);
+  });
+});
