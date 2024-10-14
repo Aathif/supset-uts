@@ -1,105 +1,103 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom'; // For custom matchers like toBeInTheDocument
-import HorizonRow from './HorizonRow';
+import transformProps from './transformProps';
 
-// Mocking the canvas context for testing purposes
-HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
-  fillRect: jest.fn(),
-  clearRect: jest.fn(),
-  setTransform: jest.fn(),
-  translate: jest.fn(),
-  scale: jest.fn(),
-  fillStyle: '',
-  imageSmoothingEnabled: false,
-  fillText: jest.fn(),
-  beginPath: jest.fn(),
-  moveTo: jest.fn(),
-  lineTo: jest.fn(),
-  stroke: jest.fn(),
-  save: jest.fn(),
-  restore: jest.fn(),
-}));
+describe('transformProps', () => {
+  it('should transform the chart properties correctly', () => {
+    // Define a sample chartProps input
+    const chartProps = {
+      formData: {
+        groupby: ['group1', 'group2'],
+        liftvaluePrecision: '2',
+        metrics: ['metric1', { label: 'metric2' }],
+        pvaluePrecision: '3',
+        significanceLevel: 0.05,
+      },
+      queriesData: [
+        {
+          data: [
+            { group1: 'A', group2: 'B', metric1: 1.2, metric2: 2.4 },
+            { group1: 'C', group2: 'D', metric1: 1.5, metric2: 3.1 },
+          ],
+        },
+      ],
+    };
 
-describe('HorizonRow', () => {
-  const defaultProps = {
-    className: 'test-class',
-    width: 800,
-    height: 20,
-    data: [
-      { y: 10 },
-      { y: -5 },
-      { y: 20 },
-      { y: 15 },
-      { y: -10 },
-    ],
-    bands: 4,
-    colors: ['#4575b4', '#74add1', '#fee090', '#fdae61', '#f46d43', '#d73027'],
-    colorScale: 'series',
-    mode: 'offset',
-    offsetX: 0,
-    title: 'Test Row',
-  };
+    // Call transformProps with the sample input
+    const result = transformProps(chartProps);
 
-  it('renders HorizonRow component with correct title and canvas', () => {
-    render(<HorizonRow {...defaultProps} />);
+    // Define the expected output
+    const expectedOutput = {
+      alpha: 0.05,
+      data: [
+        { group1: 'A', group2: 'B', metric1: 1.2, metric2: 2.4 },
+        { group1: 'C', group2: 'D', metric1: 1.5, metric2: 3.1 },
+      ],
+      groups: ['group1', 'group2'],
+      liftValPrec: 2,
+      metrics: ['metric1', 'metric2'],
+      pValPrec: 3,
+    };
 
-    // Ensure the title is rendered correctly
-    const titleElement = screen.getByText('Test Row');
-    expect(titleElement).toBeInTheDocument();
-
-    // Ensure the canvas is rendered with correct dimensions
-    const canvasElement = screen.getByRole('img');
-    expect(canvasElement).toHaveAttribute('width', defaultProps.width.toString());
-    expect(canvasElement).toHaveAttribute('height', defaultProps.height.toString());
+    // Assert that the output matches the expected result
+    expect(result).toEqual(expectedOutput);
   });
 
-  it('draws on the canvas after mounting', () => {
-    const { getContext } = HTMLCanvasElement.prototype;
-    render(<HorizonRow {...defaultProps} />);
+  it('should handle empty or missing formData and queriesData', () => {
+    const chartProps = {
+      formData: {
+        groupby: [],
+        liftvaluePrecision: '',
+        metrics: [],
+        pvaluePrecision: '',
+        significanceLevel: null,
+      },
+      queriesData: [
+        {
+          data: [],
+        },
+      ],
+    };
 
-    // Ensure that the getContext method was called
-    expect(getContext).toHaveBeenCalledWith('2d');
-    
-    const context = getContext();
-    
-    // Check that canvas methods were called for drawing
-    expect(context.clearRect).toHaveBeenCalledWith(0, 0, defaultProps.width, defaultProps.height);
-    expect(context.fillRect).toHaveBeenCalled(); // Canvas drawing actions
+    const result = transformProps(chartProps);
+
+    const expectedOutput = {
+      alpha: null,
+      data: [],
+      groups: [],
+      liftValPrec: NaN,
+      metrics: [],
+      pValPrec: NaN,
+    };
+
+    expect(result).toEqual(expectedOutput);
   });
 
-  it('updates the chart when component updates', () => {
-    const { rerender, getContext } = HTMLCanvasElement.prototype;
+  it('should correctly convert string metrics to labels when needed', () => {
+    const chartProps = {
+      formData: {
+        groupby: ['group1'],
+        liftvaluePrecision: '1',
+        metrics: [{ label: 'metric1' }],
+        pvaluePrecision: '1',
+        significanceLevel: 0.1,
+      },
+      queriesData: [
+        {
+          data: [{ group1: 'A', metric1: 5 }],
+        },
+      ],
+    };
 
-    const newData = [
-      { y: 15 },
-      { y: -8 },
-      { y: 30 },
-      { y: 25 },
-    ];
+    const result = transformProps(chartProps);
 
-    const updatedProps = { ...defaultProps, data: newData };
+    const expectedOutput = {
+      alpha: 0.1,
+      data: [{ group1: 'A', metric1: 5 }],
+      groups: ['group1'],
+      liftValPrec: 1,
+      metrics: ['metric1'],
+      pValPrec: 1,
+    };
 
-    const { rerender } = render(<HorizonRow {...defaultProps} />);
-    
-    // Initial drawing check
-    const context = getContext();
-    expect(context.fillRect).toHaveBeenCalled();
-
-    // Re-render the component with updated props
-    rerender(<HorizonRow {...updatedProps} />);
-    
-    // Verify the canvas is updated
-    expect(context.clearRect).toHaveBeenCalled();
-    expect(context.fillRect).toHaveBeenCalledTimes(newData.length); // Validate updated drawing
-  });
-
-  it('renders correctly when there is no data', () => {
-    render(<HorizonRow {...defaultProps} data={[]} />);
-    
-    // Check that no canvas drawing is triggered
-    const context = HTMLCanvasElement.prototype.getContext();
-    expect(context.clearRect).toHaveBeenCalled();
-    expect(context.fillRect).not.toHaveBeenCalled();
+    expect(result).toEqual(expectedOutput);
   });
 });
