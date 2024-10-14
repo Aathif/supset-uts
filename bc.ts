@@ -1,75 +1,87 @@
 import * as d3 from 'd3';
 import {
   getNumberFormatter,
+  getSequentialSchemeRegistry,
   CategoricalColorNamespace,
 } from '@superset-ui/core';
-import Chord from './Chord';
+import CountryMap from './CountryMap';
+import countries from './countries';
 
 // Mock external dependencies
 jest.mock('d3', () => ({
   select: jest.fn(() => ({
     classed: jest.fn().mockReturnThis(),
-    append: jest.fn(() => ({
-      attr: jest.fn().mockReturnThis(),
-      append: jest.fn().mockReturnThis(),
+    selectAll: jest.fn(() => ({
       data: jest.fn(() => ({
         enter: jest.fn(() => ({
           append: jest.fn(() => ({
             attr: jest.fn().mockReturnThis(),
             on: jest.fn().mockReturnThis(),
             style: jest.fn().mockReturnThis(),
-            text: jest.fn().mockReturnThis(),
-            selectAll: jest.fn().mockReturnThis(),
-            append: jest.fn(() => ({
-              attr: jest.fn().mockReturnThis(),
-            })),
           })),
         })),
       })),
+    })),
+    append: jest.fn(() => ({
+      attr: jest.fn().mockReturnThis(),
+      style: jest.fn().mockReturnThis(),
       on: jest.fn().mockReturnThis(),
-      selectAll: jest.fn().mockReturnThis(),
     })),
+    html: jest.fn().mockReturnThis(),
   })),
-  svg: {
-    arc: jest.fn(() => ({
-      innerRadius: jest.fn().mockReturnThis(),
-      outerRadius: jest.fn().mockReturnThis(),
+  geo: {
+    path: jest.fn(() => ({
+      centroid: jest.fn(() => [0, 0]),
+      projection: jest.fn().mockReturnThis(),
+      bounds: jest.fn(() => [
+        [0, 0],
+        [100, 100],
+      ]),
     })),
-    chord: jest.fn(() => ({
-      radius: jest.fn().mockReturnThis(),
+    mercator: jest.fn(() => ({
+      scale: jest.fn().mockReturnThis(),
+      center: jest.fn().mockReturnThis(),
+      translate: jest.fn().mockReturnThis(),
     })),
-    layout: {
-      chord: jest.fn(() => ({
-        padding: jest.fn().mockReturnThis(),
-        sortSubgroups: jest.fn().mockReturnThis(),
-        sortChords: jest.fn().mockReturnThis(),
-        matrix: jest.fn(),
-      })),
-    },
   },
+  rgb: jest.fn(() => ({
+    darker: jest.fn(() => 'darker-color'),
+  })),
+  json: jest.fn(),
+  extent: jest.fn(),
 }));
 
 jest.mock('@superset-ui/core', () => ({
   getNumberFormatter: jest.fn(() => jest.fn(value => `${value}`)),
+  getSequentialSchemeRegistry: jest.fn(() => ({
+    get: jest.fn(() => ({
+      createLinearScale: jest.fn(() => jest.fn(() => 'linear-color')),
+    })),
+  })),
   CategoricalColorNamespace: {
-    getScale: jest.fn(() => jest.fn(() => 'color')),
+    getScale: jest.fn(() => jest.fn(() => 'categorical-color')),
   },
 }));
 
-describe('Chord component', () => {
+jest.mock('./countries', () => ({
+  default: {
+    USA: 'url-to-usa-map',
+  },
+  countryOptions: [['USA', 'United States']],
+}));
+
+describe('CountryMap component', () => {
   const props = {
-    data: {
-      nodes: ['A', 'B', 'C'],
-      matrix: [
-        [0, 1, 2],
-        [1, 0, 3],
-        [2, 3, 0],
-      ],
-    },
+    data: [
+      { country_id: 'USA', metric: 100 },
+      { country_id: 'CAN', metric: 200 },
+    ],
     width: 500,
-    height: 500,
+    height: 400,
+    country: 'USA',
+    linearColorScheme: 'scheme1',
+    colorScheme: 'scheme2',
     numberFormat: '0,0',
-    colorScheme: 'scheme1',
     sliceId: 1,
   };
 
@@ -77,54 +89,74 @@ describe('Chord component', () => {
     jest.clearAllMocks();
   });
 
-  it('should render the chord diagram with correct props', () => {
+  it('should render the map and set up the SVG container', () => {
     const element = document.createElement('div');
+    d3.json.mockImplementationOnce((url, callback) => {
+      callback(null, { features: [] }); // Mock map data
+    });
 
-    // Call the Chord function
-    Chord(element, props);
+    CountryMap(element, props);
 
-    // Test d3 selection and classed setup
     expect(d3.select).toHaveBeenCalledWith(element);
     expect(d3.select(element).classed).toHaveBeenCalledWith(
-      'superset-legacy-chart-chord',
+      'superset-legacy-chart-country-map',
       true,
     );
 
-    // Test d3 arc and layout
-    expect(d3.svg.arc).toHaveBeenCalled();
-    expect(d3.svg.arc().innerRadius).toHaveBeenCalled();
-    expect(d3.svg.arc().outerRadius).toHaveBeenCalled();
+    expect(d3.select(element).selectAll('*').remove).toHaveBeenCalled();
+    expect(d3.select(element).append).toHaveBeenCalledWith('svg:svg');
+  });
 
-    // Test matrix layout setup
-    expect(d3.svg.layout.chord().matrix).toHaveBeenCalledWith(props.data.matrix);
+  it('should call d3.json to load map data', () => {
+    const element = document.createElement('div');
+    d3.json.mockImplementationOnce((url, callback) => {
+      callback(null, { features: [] });
+    });
 
-    // Ensure color function is called correctly
-    expect(CategoricalColorNamespace.getScale).toHaveBeenCalledWith(
-      props.colorScheme,
+    CountryMap(element, props);
+
+    expect(d3.json).toHaveBeenCalledWith('url-to-usa-map', expect.any(Function));
+  });
+
+  it('should handle map data error gracefully', () => {
+    const element = document.createElement('div');
+    d3.json.mockImplementationOnce((url, callback) => {
+      callback(new Error('Map data failed to load'), null);
+    });
+
+    CountryMap(element, props);
+
+    expect(d3.select(element).html).toHaveBeenCalledWith(
+      expect.stringContaining('Could not load map data for United States'),
     );
   });
 
-  it('should handle mouseover events on groups', () => {
+  it('should apply color scale correctly', () => {
     const element = document.createElement('div');
+    d3.json.mockImplementationOnce((url, callback) => {
+      callback(null, { features: [{ properties: { ISO: 'USA' } }] });
+    });
 
-    Chord(element, props);
+    CountryMap(element, props);
 
-    // Simulate a mouseover event (mocked)
-    const mouseOverHandler = d3.select(element).append().on.mock.calls[0][1];
-    mouseOverHandler({}, 0);
-
-    expect(d3.select(element).selectAll().classed).toHaveBeenCalled();
+    // Test that the color scale is applied for a country
+    const colorScale = CategoricalColorNamespace.getScale();
+    expect(colorScale).toHaveBeenCalledWith('USA', props.sliceId);
   });
 
-  it('should format numbers correctly using getNumberFormatter', () => {
+  it('should handle mouseenter and mouseout events', () => {
     const element = document.createElement('div');
+    d3.json.mockImplementationOnce((url, callback) => {
+      callback(null, { features: [{ properties: { ISO: 'USA' } }] });
+    });
 
-    Chord(element, props);
+    CountryMap(element, props);
 
-    // Check that the number formatter was called for tooltips
-    const numberFormatter = getNumberFormatter();
-    expect(numberFormatter).toHaveBeenCalledWith(0);
-    expect(numberFormatter).toHaveBeenCalledWith(1);
-    expect(numberFormatter).toHaveBeenCalledWith(2);
+    // Simulate mouseenter event
+    const mouseenterHandler = d3.select().selectAll().data().enter().append().on.mock.calls[0][1];
+    mouseenterHandler({ properties: { ISO: 'USA' } });
+
+    expect(d3.rgb).toHaveBeenCalledWith('categorical-color');
+    expect(d3.select().style).toHaveBeenCalledWith('fill', 'darker-color');
   });
 });
