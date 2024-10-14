@@ -1,96 +1,85 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import CustomHistogram from './CustomHistogram'; // Adjust the path as necessary
-import WithLegend from './WithLegend';
+import '@testing-library/jest-dom'; // Provides custom matchers
+import HorizonChart from './HorizonChart';
+import HorizonRow from './HorizonRow';
 
-// Mock the WithLegend component
-jest.mock('./WithLegend', () => ({ renderChart, renderLegend }) => (
-  <div>
-    <div data-testid="legend">{renderLegend({ direction: 'row', style: {} })}</div>
-    <div data-testid="chart">{renderChart({ width: 500, height: 300 })}</div>
-  </div>
-));
+// Mock the HorizonRow component since we are testing HorizonChart
+jest.mock('./HorizonRow', () => () => <div data-testid="horizon-row" />);
 
-describe('CustomHistogram', () => {
+describe('HorizonChart', () => {
   const mockData = [
     {
-      key: 'Series 1',
-      values: [1, 2, 3, 4, 5],
+      key: ['Series 1'],
+      values: [{ y: 10 }, { y: 20 }],
     },
     {
-      key: 'Series 2',
-      values: [2, 3, 4, 5, 6],
+      key: ['Series 2'],
+      values: [{ y: 15 }, { y: 25 }],
     },
   ];
 
   const defaultProps = {
+    className: 'test-class',
+    width: 800,
+    height: 600,
+    seriesHeight: 20,
     data: mockData,
-    width: 600,
-    height: 400,
-    binCount: 10,
-    colorScheme: 'd3Category10',
-    normalized: false,
-    cumulative: false,
-    opacity: 1,
-    xAxisLabel: 'X Axis',
-    yAxisLabel: 'Y Axis',
-    showLegend: true,
-    sliceId: 1,
+    bands: 3,
+    colors: ['#ff0000', '#00ff00', '#0000ff'],
+    colorScale: 'series',
+    mode: 'offset',
+    offsetX: 0,
   };
 
-  test('renders the chart with correct dimensions', () => {
-    render(<CustomHistogram {...defaultProps} />);
+  it('renders HorizonChart component with correct number of rows', () => {
+    render(<HorizonChart {...defaultProps} />);
 
-    const chartContainer = screen.getByTestId('chart');
-    expect(chartContainer).toBeInTheDocument();
-  });
-
-  test('renders the legend when showLegend is true', () => {
-    render(<CustomHistogram {...defaultProps} showLegend={true} />);
-
-    const legend = screen.getByTestId('legend');
-    expect(legend).toBeInTheDocument();
-  });
-
-  test('does not render the legend when showLegend is false', () => {
-    render(<CustomHistogram {...defaultProps} showLegend={false} />);
-
-    const legend = screen.queryByTestId('legend');
-    expect(legend).toBeNull();
-  });
-
-  test('passes correct binCount to Histogram', () => {
-    render(<CustomHistogram {...defaultProps} binCount={20} />);
-
-    const chartContainer = screen.getByTestId('chart');
+    // Assert that the container is in the document
+    const chartContainer = screen.getByClassName('superset-legacy-chart-horizon');
     expect(chartContainer).toBeInTheDocument();
 
-    // Since we mocked `WithLegend`, the `binCount` should be passed correctly to the rendered chart
-    // To test for prop values, you could extend the WithLegend mock to include binCount checks
+    // Ensure HorizonRow is rendered for each data row
+    const rows = screen.getAllByTestId('horizon-row');
+    expect(rows.length).toBe(2); // 2 rows for mockData
   });
 
-  test('applies correct color scheme based on colorScheme prop', () => {
-    render(<CustomHistogram {...defaultProps} colorScheme="d3Category20" />);
-
-    // We expect the color scheme function to be called internally,
-    // but the mock structure doesn't allow us to inspect it directly.
-    // We could extend this test by mocking CategoricalColorNamespace and checking if it was called with the correct colorScheme.
+  it('renders with proper styling based on props', () => {
+    render(<HorizonChart {...defaultProps} />);
+    
+    const chartContainer = screen.getByClassName('superset-legacy-chart-horizon');
+    
+    // Check if the height is set properly
+    expect(chartContainer).toHaveStyle(`height: ${defaultProps.height}px`);
+    
+    // Check if the custom className is applied
+    expect(chartContainer).toHaveClass(defaultProps.className);
   });
 
-  test('applies xAxisLabel and yAxisLabel', () => {
-    render(<CustomHistogram {...defaultProps} xAxisLabel="X Axis Test" yAxisLabel="Y Axis Test" />);
-
-    // Expect the labels to be passed down to the XAxis and YAxis components inside the chart
-    expect(screen.getByText('X Axis Test')).toBeInTheDocument();
-    expect(screen.getByText('Y Axis Test')).toBeInTheDocument();
+  it('renders correctly when colorScale is overall', () => {
+    const updatedProps = { ...defaultProps, colorScale: 'overall' };
+    render(<HorizonChart {...updatedProps} />);
+    
+    // HorizonRows should still render even when colorScale is overall
+    const rows = screen.getAllByTestId('horizon-row');
+    expect(rows.length).toBe(2);
   });
 
-  test('renders bar series for each data series', () => {
-    render(<CustomHistogram {...defaultProps} />);
+  it('renders with different seriesHeight for each row', () => {
+    const updatedProps = { ...defaultProps, seriesHeight: 40 };
+    render(<HorizonChart {...updatedProps} />);
 
-    // Since we don't have a direct way of inspecting the BarSeries (which would be inside the mocked chart),
-    // we assume the render works if no errors are thrown and the chart is rendered.
-    expect(screen.getByTestId('chart')).toBeInTheDocument();
+    // Ensure HorizonRow is rendered with the correct height
+    const rows = screen.getAllByTestId('horizon-row');
+    rows.forEach(row => {
+      expect(row).toHaveStyle(`height: ${updatedProps.seriesHeight}px`);
+    });
+  });
+
+  it('renders empty component when data is empty', () => {
+    render(<HorizonChart {...defaultProps} data={[]} />);
+
+    const rows = screen.queryByTestId('horizon-row');
+    expect(rows).toBeNull(); // No rows should be rendered when data is empty
   });
 });
