@@ -1,85 +1,105 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom'; // Provides custom matchers
-import HorizonChart from './HorizonChart';
+import '@testing-library/jest-dom'; // For custom matchers like toBeInTheDocument
 import HorizonRow from './HorizonRow';
 
-// Mock the HorizonRow component since we are testing HorizonChart
-jest.mock('./HorizonRow', () => () => <div data-testid="horizon-row" />);
+// Mocking the canvas context for testing purposes
+HTMLCanvasElement.prototype.getContext = jest.fn(() => ({
+  fillRect: jest.fn(),
+  clearRect: jest.fn(),
+  setTransform: jest.fn(),
+  translate: jest.fn(),
+  scale: jest.fn(),
+  fillStyle: '',
+  imageSmoothingEnabled: false,
+  fillText: jest.fn(),
+  beginPath: jest.fn(),
+  moveTo: jest.fn(),
+  lineTo: jest.fn(),
+  stroke: jest.fn(),
+  save: jest.fn(),
+  restore: jest.fn(),
+}));
 
-describe('HorizonChart', () => {
-  const mockData = [
-    {
-      key: ['Series 1'],
-      values: [{ y: 10 }, { y: 20 }],
-    },
-    {
-      key: ['Series 2'],
-      values: [{ y: 15 }, { y: 25 }],
-    },
-  ];
-
+describe('HorizonRow', () => {
   const defaultProps = {
     className: 'test-class',
     width: 800,
-    height: 600,
-    seriesHeight: 20,
-    data: mockData,
-    bands: 3,
-    colors: ['#ff0000', '#00ff00', '#0000ff'],
+    height: 20,
+    data: [
+      { y: 10 },
+      { y: -5 },
+      { y: 20 },
+      { y: 15 },
+      { y: -10 },
+    ],
+    bands: 4,
+    colors: ['#4575b4', '#74add1', '#fee090', '#fdae61', '#f46d43', '#d73027'],
     colorScale: 'series',
     mode: 'offset',
     offsetX: 0,
+    title: 'Test Row',
   };
 
-  it('renders HorizonChart component with correct number of rows', () => {
-    render(<HorizonChart {...defaultProps} />);
+  it('renders HorizonRow component with correct title and canvas', () => {
+    render(<HorizonRow {...defaultProps} />);
 
-    // Assert that the container is in the document
-    const chartContainer = screen.getByClassName('superset-legacy-chart-horizon');
-    expect(chartContainer).toBeInTheDocument();
+    // Ensure the title is rendered correctly
+    const titleElement = screen.getByText('Test Row');
+    expect(titleElement).toBeInTheDocument();
 
-    // Ensure HorizonRow is rendered for each data row
-    const rows = screen.getAllByTestId('horizon-row');
-    expect(rows.length).toBe(2); // 2 rows for mockData
+    // Ensure the canvas is rendered with correct dimensions
+    const canvasElement = screen.getByRole('img');
+    expect(canvasElement).toHaveAttribute('width', defaultProps.width.toString());
+    expect(canvasElement).toHaveAttribute('height', defaultProps.height.toString());
   });
 
-  it('renders with proper styling based on props', () => {
-    render(<HorizonChart {...defaultProps} />);
+  it('draws on the canvas after mounting', () => {
+    const { getContext } = HTMLCanvasElement.prototype;
+    render(<HorizonRow {...defaultProps} />);
+
+    // Ensure that the getContext method was called
+    expect(getContext).toHaveBeenCalledWith('2d');
     
-    const chartContainer = screen.getByClassName('superset-legacy-chart-horizon');
+    const context = getContext();
     
-    // Check if the height is set properly
-    expect(chartContainer).toHaveStyle(`height: ${defaultProps.height}px`);
-    
-    // Check if the custom className is applied
-    expect(chartContainer).toHaveClass(defaultProps.className);
+    // Check that canvas methods were called for drawing
+    expect(context.clearRect).toHaveBeenCalledWith(0, 0, defaultProps.width, defaultProps.height);
+    expect(context.fillRect).toHaveBeenCalled(); // Canvas drawing actions
   });
 
-  it('renders correctly when colorScale is overall', () => {
-    const updatedProps = { ...defaultProps, colorScale: 'overall' };
-    render(<HorizonChart {...updatedProps} />);
+  it('updates the chart when component updates', () => {
+    const { rerender, getContext } = HTMLCanvasElement.prototype;
+
+    const newData = [
+      { y: 15 },
+      { y: -8 },
+      { y: 30 },
+      { y: 25 },
+    ];
+
+    const updatedProps = { ...defaultProps, data: newData };
+
+    const { rerender } = render(<HorizonRow {...defaultProps} />);
     
-    // HorizonRows should still render even when colorScale is overall
-    const rows = screen.getAllByTestId('horizon-row');
-    expect(rows.length).toBe(2);
+    // Initial drawing check
+    const context = getContext();
+    expect(context.fillRect).toHaveBeenCalled();
+
+    // Re-render the component with updated props
+    rerender(<HorizonRow {...updatedProps} />);
+    
+    // Verify the canvas is updated
+    expect(context.clearRect).toHaveBeenCalled();
+    expect(context.fillRect).toHaveBeenCalledTimes(newData.length); // Validate updated drawing
   });
 
-  it('renders with different seriesHeight for each row', () => {
-    const updatedProps = { ...defaultProps, seriesHeight: 40 };
-    render(<HorizonChart {...updatedProps} />);
-
-    // Ensure HorizonRow is rendered with the correct height
-    const rows = screen.getAllByTestId('horizon-row');
-    rows.forEach(row => {
-      expect(row).toHaveStyle(`height: ${updatedProps.seriesHeight}px`);
-    });
-  });
-
-  it('renders empty component when data is empty', () => {
-    render(<HorizonChart {...defaultProps} data={[]} />);
-
-    const rows = screen.queryByTestId('horizon-row');
-    expect(rows).toBeNull(); // No rows should be rendered when data is empty
+  it('renders correctly when there is no data', () => {
+    render(<HorizonRow {...defaultProps} data={[]} />);
+    
+    // Check that no canvas drawing is triggered
+    const context = HTMLCanvasElement.prototype.getContext();
+    expect(context.clearRect).toHaveBeenCalled();
+    expect(context.fillRect).not.toHaveBeenCalled();
   });
 });
