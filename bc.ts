@@ -1,138 +1,96 @@
-import * as color from 'd3-color';
-import { getTimeFormatterForGranularity, getNumberFormatter, NumberFormats } from '@superset-ui/core';
-const TIME_COLUMN = '__timestamp';
-const formatPercentChange = getNumberFormatter(NumberFormats.PERCENT_SIGNED_1_POINT); // we trust both the x (time) and y (card widget) to be numeric
+import transformProps from './transformProps';
+import { getNumberFormatter, getTimeFormatterForGranularity } from '@superset-ui/core';
 
-export default function transformProps(chartProps) {
-  const {
-    width,
-    height,
-    queriesData,
-    formData
-  } = chartProps;
-  const {
-    colorPicker,
-    compareLag: compareLag_,
-    compareSuffix = '',
-    headerFontSize,
-    metrics = 'value',
-    showTrendLine,
-    startYAxisAtZero,
-    subheader = '',
-    subheaderFontSize,
-    timeGrainSqla: granularity,
-    vizType,
-    timeRangeFixed = false,
-    comparator,
-    operatorColor,
-    cellBgColor,
-    cellBgColor1,
-    targetName,
-    targetValue
-  } = formData;
-  let {
-    yAxisFormat
-  } = formData;
-  const {
-    data = [],
-    from_dttm: fromDatetime,
-    to_dttm: toDatetime
-  } = queriesData[0];
-  const metricName = typeof metrics === 'string' ? metrics :(metrics[0].label ||  metrics.label || metrics[0]);
-  const compareLag = Number(compareLag_) || 0;
-  const supportTrendLine = vizType === 'card_widget';
-  const supportAndShowTrendLine = supportTrendLine && showTrendLine;
-  let formattedSubheader = subheader;
-  let mainColor;
-
-  if (colorPicker) {
-    const {
-      r,
-      g,
-      b
-    } = colorPicker;
-    mainColor = color.rgb(r, g, b).hex();
+jest.mock('@superset-ui/core', () => ({
+  getTimeFormatterForGranularity: jest.fn(),
+  getNumberFormatter: jest.fn(),
+  NumberFormats: {
+    PERCENT_SIGNED_1_POINT: '0.1%'
   }
+}));
 
-  let trendLineData;
-  let percentChange = 0;
-  let CardWidget = data.length === 0 ? null : data[0][metricName];
-  let CardWidgetFallback;
-  if (data.length > 0) {
-    const sortedData = data.map(d => ({
-      x: d[TIME_COLUMN],
-      y: d[metricName]
-    })) // sort in time descending order
-    .sort((a, b) => a.x !== null && b.x !== null ? b.x - a.x : 0);
-    CardWidget = sortedData[0].y;
+describe('transformProps', () => {
+  it('should transform chartProps correctly', () => {
+    // Mock formatters
+    const mockNumberFormatter = jest.fn(value => `formatted-${value}`);
+    const mockTimeFormatter = jest.fn(value => `formatted-time-${value}`);
 
-    if (CardWidget === null) {
-      CardWidgetFallback = sortedData.find(d => d.y !== null);
-      CardWidget = CardWidgetFallback ? CardWidgetFallback.y : null;
-    }
+    getNumberFormatter.mockReturnValue(mockNumberFormatter);
+    getTimeFormatterForGranularity.mockReturnValue(mockTimeFormatter);
 
-    if (compareLag > 0) {
-      const compareIndex = compareLag;
-
-      if (compareIndex < sortedData.length) {
-        const compareValue = sortedData[compareIndex].y; // compare values must both be non-nulls
-
-        if (CardWidget !== null && compareValue !== null && compareValue !== 0) {
-          percentChange = (CardWidget - compareValue) / Math.abs(compareValue);
-          formattedSubheader = `${formatPercentChange(percentChange)} ${compareSuffix}`;
-        }
+    const chartProps = {
+      width: 800,
+      height: 600,
+      queriesData: [{
+        data: [
+          { __timestamp: 1633024800000, value: 100 },
+          { __timestamp: 1633111200000, value: 120 },
+          { __timestamp: 1633197600000, value: 110 },
+        ],
+        from_dttm: '2021-09-30T00:00:00',
+        to_dttm: '2021-10-02T00:00:00',
+      }],
+      formData: {
+        colorPicker: { r: 255, g: 0, b: 0 },
+        compareLag: 1,
+        compareSuffix: '%',
+        headerFontSize: 12,
+        metrics: 'value',
+        showTrendLine: true,
+        subheader: '',
+        subheaderFontSize: 10,
+        timeGrainSqla: 'P1D',
+        vizType: 'card_widget',
+        comparator: null,
+        operatorColor: null,
+        cellBgColor: null,
+        cellBgColor1: null,
+        targetName: 'target',
+        targetValue: 150,
+        yAxisFormat: '0,0',
+        timeRangeFixed: false,
       }
-    }
+    };
 
-    if (supportTrendLine) {
-      // must reverse to ascending order otherwise it confuses tooltip triggers
-      sortedData.reverse();
-      trendLineData = supportAndShowTrendLine ? sortedData : undefined;
-    }
-  }
+    const transformedProps = transformProps(chartProps);
 
-  let className = '';
-
-  if (percentChange > 0) {
-    className = 'positive';
-  } else if (percentChange < 0) {
-    className = 'negative';
-  }
-
-  if (!yAxisFormat && chartProps.datasource && chartProps.datasource.metrics) {
-    chartProps.datasource.metrics.forEach(metricEntry => {
-      if (metricEntry.metric_name === metrics && metricEntry.d3format) {
-        yAxisFormat = metricEntry.d3format;
-      }
+    expect(transformedProps).toEqual({
+      width: 800,
+      height: 600,
+      CardWidget: 120,
+      data: [
+        { __timestamp: 1633024800000, value: 100 },
+        { __timestamp: 1633111200000, value: 120 },
+        { __timestamp: 1633197600000, value: 110 },
+      ],
+      CardWidgetFallback: undefined,
+      className: 'positive',
+      formatNumber: mockNumberFormatter,
+      formatTime: mockTimeFormatter,
+      headerFontSize: 12,
+      subheaderFontSize: 10,
+      mainColor: '#ff0000',
+      showTrendLine: true,
+      startYAxisAtZero: undefined,
+      subheader: 'formatted-0.2000 %',
+      trendLineData: [
+        { x: 1633024800000, y: 100 },
+        { x: 1633111200000, y: 120 },
+        { x: 1633197600000, y: 110 },
+      ],
+      fromDatetime: '2021-09-30T00:00:00',
+      toDatetime: '2021-10-02T00:00:00',
+      timeRangeFixed: false,
+      comparator: null,
+      operatorColor: null,
+      cellBgColor: null,
+      cellBgColor1: null,
+      targetName: 'target',
+      targetValue: 150
     });
-  }
 
-  const formatNumber = getNumberFormatter(yAxisFormat);
-  const formatTime = getTimeFormatterForGranularity(granularity);
-  return {
-    width,
-    height,
-    CardWidget,
-    data,
-    CardWidgetFallback,
-    className,
-    formatNumber,
-    formatTime,
-    headerFontSize,
-    subheaderFontSize,
-    mainColor,
-    showTrendLine: supportAndShowTrendLine,
-    startYAxisAtZero,
-    subheader: formattedSubheader,
-    trendLineData,
-    fromDatetime,
-    toDatetime,
-    timeRangeFixed,
-    comparator,
-    operatorColor,
-    cellBgColor,
-    cellBgColor1,
-    targetName,
-    targetValue
-  };
-}
+    // Check if the formatters were called correctly
+    expect(getNumberFormatter).toHaveBeenCalledWith('0,0');
+    expect(getTimeFormatterForGranularity).toHaveBeenCalledWith('P1D');
+  });
+});
