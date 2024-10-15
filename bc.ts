@@ -1,103 +1,138 @@
-import transformProps from './transformProps';
+import * as color from 'd3-color';
+import { getTimeFormatterForGranularity, getNumberFormatter, NumberFormats } from '@superset-ui/core';
+const TIME_COLUMN = '__timestamp';
+const formatPercentChange = getNumberFormatter(NumberFormats.PERCENT_SIGNED_1_POINT); // we trust both the x (time) and y (card widget) to be numeric
 
-describe('transformProps', () => {
-  it('should transform the chart properties correctly', () => {
-    // Define a sample chartProps input
-    const chartProps = {
-      formData: {
-        groupby: ['group1', 'group2'],
-        liftvaluePrecision: '2',
-        metrics: ['metric1', { label: 'metric2' }],
-        pvaluePrecision: '3',
-        significanceLevel: 0.05,
-      },
-      queriesData: [
-        {
-          data: [
-            { group1: 'A', group2: 'B', metric1: 1.2, metric2: 2.4 },
-            { group1: 'C', group2: 'D', metric1: 1.5, metric2: 3.1 },
-          ],
-        },
-      ],
-    };
+export default function transformProps(chartProps) {
+  const {
+    width,
+    height,
+    queriesData,
+    formData
+  } = chartProps;
+  const {
+    colorPicker,
+    compareLag: compareLag_,
+    compareSuffix = '',
+    headerFontSize,
+    metrics = 'value',
+    showTrendLine,
+    startYAxisAtZero,
+    subheader = '',
+    subheaderFontSize,
+    timeGrainSqla: granularity,
+    vizType,
+    timeRangeFixed = false,
+    comparator,
+    operatorColor,
+    cellBgColor,
+    cellBgColor1,
+    targetName,
+    targetValue
+  } = formData;
+  let {
+    yAxisFormat
+  } = formData;
+  const {
+    data = [],
+    from_dttm: fromDatetime,
+    to_dttm: toDatetime
+  } = queriesData[0];
+  const metricName = typeof metrics === 'string' ? metrics :(metrics[0].label ||  metrics.label || metrics[0]);
+  const compareLag = Number(compareLag_) || 0;
+  const supportTrendLine = vizType === 'card_widget';
+  const supportAndShowTrendLine = supportTrendLine && showTrendLine;
+  let formattedSubheader = subheader;
+  let mainColor;
 
-    // Call transformProps with the sample input
-    const result = transformProps(chartProps);
+  if (colorPicker) {
+    const {
+      r,
+      g,
+      b
+    } = colorPicker;
+    mainColor = color.rgb(r, g, b).hex();
+  }
 
-    // Define the expected output
-    const expectedOutput = {
-      alpha: 0.05,
-      data: [
-        { group1: 'A', group2: 'B', metric1: 1.2, metric2: 2.4 },
-        { group1: 'C', group2: 'D', metric1: 1.5, metric2: 3.1 },
-      ],
-      groups: ['group1', 'group2'],
-      liftValPrec: 2,
-      metrics: ['metric1', 'metric2'],
-      pValPrec: 3,
-    };
+  let trendLineData;
+  let percentChange = 0;
+  let CardWidget = data.length === 0 ? null : data[0][metricName];
+  let CardWidgetFallback;
+  if (data.length > 0) {
+    const sortedData = data.map(d => ({
+      x: d[TIME_COLUMN],
+      y: d[metricName]
+    })) // sort in time descending order
+    .sort((a, b) => a.x !== null && b.x !== null ? b.x - a.x : 0);
+    CardWidget = sortedData[0].y;
 
-    // Assert that the output matches the expected result
-    expect(result).toEqual(expectedOutput);
-  });
+    if (CardWidget === null) {
+      CardWidgetFallback = sortedData.find(d => d.y !== null);
+      CardWidget = CardWidgetFallback ? CardWidgetFallback.y : null;
+    }
 
-  it('should handle empty or missing formData and queriesData', () => {
-    const chartProps = {
-      formData: {
-        groupby: [],
-        liftvaluePrecision: '',
-        metrics: [],
-        pvaluePrecision: '',
-        significanceLevel: null,
-      },
-      queriesData: [
-        {
-          data: [],
-        },
-      ],
-    };
+    if (compareLag > 0) {
+      const compareIndex = compareLag;
 
-    const result = transformProps(chartProps);
+      if (compareIndex < sortedData.length) {
+        const compareValue = sortedData[compareIndex].y; // compare values must both be non-nulls
 
-    const expectedOutput = {
-      alpha: null,
-      data: [],
-      groups: [],
-      liftValPrec: NaN,
-      metrics: [],
-      pValPrec: NaN,
-    };
+        if (CardWidget !== null && compareValue !== null && compareValue !== 0) {
+          percentChange = (CardWidget - compareValue) / Math.abs(compareValue);
+          formattedSubheader = `${formatPercentChange(percentChange)} ${compareSuffix}`;
+        }
+      }
+    }
 
-    expect(result).toEqual(expectedOutput);
-  });
+    if (supportTrendLine) {
+      // must reverse to ascending order otherwise it confuses tooltip triggers
+      sortedData.reverse();
+      trendLineData = supportAndShowTrendLine ? sortedData : undefined;
+    }
+  }
 
-  it('should correctly convert string metrics to labels when needed', () => {
-    const chartProps = {
-      formData: {
-        groupby: ['group1'],
-        liftvaluePrecision: '1',
-        metrics: [{ label: 'metric1' }],
-        pvaluePrecision: '1',
-        significanceLevel: 0.1,
-      },
-      queriesData: [
-        {
-          data: [{ group1: 'A', metric1: 5 }],
-        },
-      ],
-    };
+  let className = '';
 
-    const result = transformProps(chartProps);
+  if (percentChange > 0) {
+    className = 'positive';
+  } else if (percentChange < 0) {
+    className = 'negative';
+  }
 
-    const expectedOutput = {
-      alpha: 0.1,
-      data: [{ group1: 'A', metric1: 5 }],
-      groups: ['group1'],
-      liftValPrec: 1,
-      metrics: ['metric1'],
-      pValPrec: 1,
-    };
+  if (!yAxisFormat && chartProps.datasource && chartProps.datasource.metrics) {
+    chartProps.datasource.metrics.forEach(metricEntry => {
+      if (metricEntry.metric_name === metrics && metricEntry.d3format) {
+        yAxisFormat = metricEntry.d3format;
+      }
+    });
+  }
 
-    expect(result).toEqual(expectedOutput);
-  });
-});
+  const formatNumber = getNumberFormatter(yAxisFormat);
+  const formatTime = getTimeFormatterForGranularity(granularity);
+  return {
+    width,
+    height,
+    CardWidget,
+    data,
+    CardWidgetFallback,
+    className,
+    formatNumber,
+    formatTime,
+    headerFontSize,
+    subheaderFontSize,
+    mainColor,
+    showTrendLine: supportAndShowTrendLine,
+    startYAxisAtZero,
+    subheader: formattedSubheader,
+    trendLineData,
+    fromDatetime,
+    toDatetime,
+    timeRangeFixed,
+    comparator,
+    operatorColor,
+    cellBgColor,
+    cellBgColor1,
+    targetName,
+    targetValue
+  };
+}
