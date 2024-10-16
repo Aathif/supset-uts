@@ -1,60 +1,237 @@
-import DateWithFormatter from './DateWithFormatter';
-import { TimeFormatFunction } from '@superset-ui/core';
+import { CategoricalColorNamespace, getNumberFormatter, isEventAnnotationLayer, isFormulaAnnotationLayer, isIntervalAnnotationLayer, isTimeseriesAnnotationLayer } from '@superset-ui/core';
+import { DEFAULT_FORM_DATA } from './types';
+import { ForecastSeriesEnum } from '../types';
+import { parseYAxisBound } from '../utils/controls';
+import { dedupSeries, extractTimeseriesSeries, getLegendProps } from '../utils/series';
+import { extractAnnotationLabels } from '../utils/annotation';
+import { extractForecastSeriesContext, extractProphetValuesFromTooltipParams, formatProphetTooltipSeries, rebaseTimeseriesDatum } from '../utils/prophet';
+import { defaultGrid, defaultTooltip, defaultYAxis } from '../defaults';
+import { getPadding, getTooltipFormatter, getXAxisFormatter, transformEventAnnotation, transformFormulaAnnotation, transformIntervalAnnotation, transformSeries, transformTimeseriesAnnotation } from '../Timeseries/transformers';
+import { TIMESERIES_CONSTANTS } from '../constants';
+export default function transformProps(chartProps) {
+  const {
+    width,
+    height,
+    formData,
+    queriesData
+  } = chartProps;
+  const {
+    annotation_data: annotationData_,
+    data: data1 = []
+  } = queriesData[0];
+  const {
+    data: data2 = []
+  } = queriesData[1];
+  const annotationData = annotationData_ || {};
+  const {
+    area,
+    areaB,
+    annotationLayers,
+    colorScheme,
+    contributionMode,
+    legendOrientation,
+    legendType,
+    logAxis,
+    logAxisSecondary,
+    markerEnabled,
+    markerEnabledB,
+    markerSize,
+    markerSizeB,
+    opacity,
+    opacityB,
+    minorSplitLine,
+    seriesType,
+    seriesTypeB,
+    showLegend,
+    stack,
+    stackB,
+    truncateYAxis,
+    tooltipTimeFormat,
+    yAxisFormat,
+    yAxisFormatSecondary,
+    xAxisShowMinLabel,
+    xAxisShowMaxLabel,
+    xAxisTimeFormat,
+    yAxisBounds,
+    yAxisIndex,
+    yAxisIndexB,
+    yAxisTitle,
+    yAxisTitleSecondary,
+    zoomable,
+    richTooltip,
+    xAxisLabelRotation
+  } = { ...DEFAULT_FORM_DATA,
+    ...formData
+  };
+  const colorScale = CategoricalColorNamespace.getScale(colorScheme);
+  const rawSeriesA = extractTimeseriesSeries(rebaseTimeseriesDatum(data1), {
+    fillNeighborValue: stack ? 0 : undefined
+  });
+  const rawSeriesB = extractTimeseriesSeries(rebaseTimeseriesDatum(data2), {
+    fillNeighborValue: stackB ? 0 : undefined
+  });
+  const series = [];
+  const formatter = getNumberFormatter(contributionMode ? ',.0%' : yAxisFormat);
+  const formatterSecondary = getNumberFormatter(contributionMode ? ',.0%' : yAxisFormatSecondary);
+  rawSeriesA.forEach(entry => {
+    const transformedSeries = transformSeries(entry, colorScale, {
+      area,
+      markerEnabled,
+      markerSize,
+      opacity,
+      seriesType,
+      stack,
+      richTooltip,
+      yAxisIndex
+    });
+    if (transformedSeries) series.push(transformedSeries);
+  });
+  rawSeriesB.forEach(entry => {
+    const transformedSeries = transformSeries(entry, colorScale, {
+      area: areaB,
+      markerEnabled: markerEnabledB,
+      markerSize: markerSizeB,
+      opacity: opacityB,
+      seriesType: seriesTypeB,
+      stack: stackB,
+      richTooltip,
+      yAxisIndex: yAxisIndexB
+    });
+    if (transformedSeries) series.push(transformedSeries);
+  });
+  annotationLayers.filter(layer => layer.show).forEach(layer => {
+    if (isFormulaAnnotationLayer(layer)) series.push(transformFormulaAnnotation(layer, data1, colorScale));else if (isIntervalAnnotationLayer(layer)) {
+      series.push(...transformIntervalAnnotation(layer, data1, annotationData, colorScale));
+    } else if (isEventAnnotationLayer(layer)) {
+      series.push(...transformEventAnnotation(layer, data1, annotationData, colorScale));
+    } else if (isTimeseriesAnnotationLayer(layer)) {
+      series.push(...transformTimeseriesAnnotation(layer, markerSize, data1, annotationData));
+    }
+  }); // yAxisBounds need to be parsed to replace incompatible values with undefined
 
-describe('DateWithFormatter', () => {
-  const defaultDate = '2023-10-10T12:34:56';
-  const dateWithTimeZone = '2023-10-10T12:34:56Z';
-  
-  it('should initialize correctly with default parameters', () => {
-    const date = new DateWithFormatter(defaultDate);
-    
-    // Should retain the original input
-    expect(date.input).toBe(defaultDate);
-    
-    // Default formatter should return the input as a string
-    expect(date.toString()).toBe(defaultDate);
-  });
-  
-  it('should append "Z" to timestamp without timezone when forceUTC is true', () => {
-    const date = new DateWithFormatter(defaultDate, { forceUTC: true });
-    
-    // Date should be adjusted to UTC
-    expect(date.toISOString()).toBe(new Date(`${defaultDate}Z`).toISOString());
-  });
+  let [min, max] = (yAxisBounds || []).map(parseYAxisBound); // default to 0-100% range when doing row-level contribution chart
 
-  it('should not append "Z" when forceUTC is false', () => {
-    const date = new DateWithFormatter(defaultDate, { forceUTC: false });
-    
-    // Date should not be adjusted
-    expect(date.toISOString()).toBe(new Date(defaultDate).toISOString());
-  });
+  if (contributionMode === 'row' && stack) {
+    if (min === undefined) min = 0;
+    if (max === undefined) max = 1;
+  }
 
-  it('should apply a custom formatter correctly', () => {
-    const customFormatter: TimeFormatFunction = (date: Date) => `Formatted: ${date.getFullYear()}`;
-    const date = new DateWithFormatter(defaultDate, { formatter: customFormatter });
-    
-    // Custom formatter should format the date correctly
-    expect(date.toString()).toBe('Formatted: 2023');
-  });
-
-  it('should handle timezone-aware dates correctly', () => {
-    const date = new DateWithFormatter(dateWithTimeZone, { forceUTC: true });
-    
-    // Should retain the original input and parse correctly
-    expect(date.toISOString()).toBe(new Date(dateWithTimeZone).toISOString());
-  });
-
-  it('should return input string when formatter is String', () => {
-    const date = new DateWithFormatter(dateWithTimeZone, { formatter: String });
-    
-    // Should return the original input string
-    expect(date.toString()).toBe(dateWithTimeZone);
-  });
-
-  it('should behave like a native Date when no formatter is provided', () => {
-    const date = new DateWithFormatter(defaultDate, { formatter: undefined });
-    
-    // Should behave like a native Date
-    expect(date.toString()).toBe(new Date(defaultDate).toString());
-  });
-});
+  const tooltipFormatter = getTooltipFormatter(tooltipTimeFormat);
+  const xAxisFormatter = getXAxisFormatter(xAxisTimeFormat);
+  const addYAxisLabelOffset = !!(yAxisTitle || yAxisTitleSecondary);
+  const chartPadding = getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable);
+  const echartOptions = {
+    useUTC: true,
+    grid: { ...defaultGrid,
+      ...chartPadding
+    },
+    xAxis: {
+      type: 'time',
+      axisLabel: {
+        showMinLabel: xAxisShowMinLabel,
+        showMaxLabel: xAxisShowMaxLabel,
+        formatter: xAxisFormatter,
+        rotate: xAxisLabelRotation,
+        color: '#626D8A',
+        fontSize: 11,
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#EAEEF4'
+        }
+      }
+    },
+    yAxis: [{ ...defaultYAxis,
+      type: logAxis ? 'log' : 'value',
+      min,
+      max,
+      minorTick: {
+        show: true
+      },
+      minorSplitLine: {
+        show: minorSplitLine
+      },
+      axisLabel: {
+        formatter,
+        color: '#626D8A',
+        fontSize: 11,
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#EAEEF4'
+        },
+      },
+      scale: truncateYAxis,
+      name: yAxisTitle
+    }, { ...defaultYAxis,
+      type: logAxisSecondary ? 'log' : 'value',
+      min,
+      max,
+      minorTick: {
+        show: true
+      },
+      splitLine: {
+        show: false
+      },
+      minorSplitLine: {
+        show: minorSplitLine
+      },
+      axisLabel: {
+        formatter: formatterSecondary
+      },
+      scale: truncateYAxis,
+      name: yAxisTitleSecondary
+    }],
+    tooltip: { ...defaultTooltip,
+      trigger: richTooltip ? 'axis' : 'item',
+      formatter: params => {
+        const value = !richTooltip ? params.value : params[0].value[0];
+        const prophetValue = !richTooltip ? [params] : params;
+        const rows = [`${tooltipFormatter(value)}`];
+        const prophetValues = extractProphetValuesFromTooltipParams(prophetValue);
+        Object.keys(prophetValues).forEach(key => {
+          const value = prophetValues[key];
+          rows.push(formatProphetTooltipSeries({ ...value,
+            seriesName: key,
+            formatter
+          }));
+        });
+        return rows.join('<br />');
+      }
+    },
+    legend: { ...getLegendProps(legendType, legendOrientation, showLegend, zoomable),
+      textStyle: {
+        fontSize: 11,
+        color: '#626D8A'
+      },
+      // @ts-ignore
+      data: rawSeriesA.concat(rawSeriesB).filter(entry => extractForecastSeriesContext(entry.name || '').type === ForecastSeriesEnum.Observation).map(entry => entry.name || '').concat(extractAnnotationLabels(annotationLayers, annotationData))
+    },
+    series: dedupSeries(series),
+    toolbox: {
+      show: zoomable,
+      top: TIMESERIES_CONSTANTS.toolboxTop,
+      right: TIMESERIES_CONSTANTS.toolboxRight,
+      feature: {
+        dataZoom: {
+          yAxisIndex: false,
+          title: {
+            zoom: 'zoom area',
+            back: 'restore zoom'
+          }
+        }
+      }
+    },
+    dataZoom: zoomable ? [{
+      type: 'slider',
+      start: TIMESERIES_CONSTANTS.dataZoomStart,
+      end: TIMESERIES_CONSTANTS.dataZoomEnd,
+      bottom: TIMESERIES_CONSTANTS.zoomBottom
+    }] : []
+  };
+  return {
+    echartOptions,
+    width,
+    height
+  };
+}
