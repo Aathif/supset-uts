@@ -1,48 +1,70 @@
-import exportCsvReducer, { EXPORT_CSV_INITIAL_STATE } from './exportCsvReducer';
-import { SET_VISIBLE_COLUMNS, SET_DATASTATE } from '../actions/types';
+import dashboardStateReducer from './dashboardStateReducer';
+import {
+  DASHBOARD_INFO_UPDATED,
+  SET_FILTER_BAR_ORIENTATION,
+  SET_CROSS_FILTERS_ENABLED,
+} from '../actions/dashboardInfo';
+import { HYDRATE_DASHBOARD } from '../actions/hydrate';
 
-describe('exportCsvReducer', () => {
+describe('dashboardStateReducer', () => {
+  const initialState = {
+    last_modified_time: 0,
+    filterBarOrientation: 'top',
+    crossFiltersEnabled: false,
+  };
+
   it('should return the initial state when no action is provided', () => {
-    const result = exportCsvReducer(undefined, {});
-    expect(result).toEqual(EXPORT_CSV_INITIAL_STATE);
+    const result = dashboardStateReducer(undefined, {});
+    expect(result).toEqual({});
   });
 
-  it('should handle SET_VISIBLE_COLUMNS action', () => {
+  it('should handle DASHBOARD_INFO_UPDATED action', () => {
+    const newInfo = { title: 'New Dashboard Title' };
     const action = {
-      type: SET_VISIBLE_COLUMNS,
-      payload: { column1: true, column2: false },
+      type: DASHBOARD_INFO_UPDATED,
+      newInfo,
     };
-    const expectedState = {
-      ...EXPORT_CSV_INITIAL_STATE,
-      formData: { column1: true, column2: false },
-    };
-
-    const result = exportCsvReducer(EXPORT_CSV_INITIAL_STATE, action);
-    expect(result).toEqual(expectedState);
+    const result = dashboardStateReducer(initialState, action);
+    expect(result.title).toEqual(newInfo.title);
+    expect(result.last_modified_time).toBeGreaterThan(0); // Ensures that the last_modified_time is updated
   });
 
-  it('should handle SET_DATASTATE action', () => {
+  it('should handle HYDRATE_DASHBOARD action', () => {
     const action = {
-      type: SET_DATASTATE,
-      payload: { isLoading: true, data: [] },
+      type: HYDRATE_DASHBOARD,
+      data: {
+        dashboardInfo: {
+          title: 'Hydrated Dashboard',
+          last_modified_time: 12345,
+        },
+      },
     };
-    const expectedState = {
-      ...EXPORT_CSV_INITIAL_STATE,
-      dataState: { isLoading: true, data: [] },
-    };
+    const result = dashboardStateReducer(initialState, action);
+    expect(result.title).toEqual('Hydrated Dashboard');
+    expect(result.last_modified_time).toEqual(12345); // Verifying that last_modified_time is set from the action
+  });
 
-    const result = exportCsvReducer(EXPORT_CSV_INITIAL_STATE, action);
-    expect(result).toEqual(expectedState);
+  it('should handle SET_FILTER_BAR_ORIENTATION action', () => {
+    const action = {
+      type: SET_FILTER_BAR_ORIENTATION,
+      filterBarOrientation: 'left',
+    };
+    const result = dashboardStateReducer(initialState, action);
+    expect(result.filterBarOrientation).toEqual('left');
+  });
+
+  it('should handle SET_CROSS_FILTERS_ENABLED action', () => {
+    const action = {
+      type: SET_CROSS_FILTERS_ENABLED,
+      crossFiltersEnabled: true,
+    };
+    const result = dashboardStateReducer(initialState, action);
+    expect(result.crossFiltersEnabled).toEqual(true);
   });
 
   it('should return the current state for unknown action types', () => {
     const action = { type: 'UNKNOWN_ACTION' };
-    const currentState = {
-      formData: { column1: true },
-      dataState: { isLoading: false },
-    };
-
-    const result = exportCsvReducer(currentState, action);
-    expect(result).toEqual(currentState);
+    const result = dashboardStateReducer(initialState, action);
+    expect(result).toEqual(initialState);
   });
 });
