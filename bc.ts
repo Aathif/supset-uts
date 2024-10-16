@@ -1,84 +1,420 @@
-import { renderHook, act } from '@testing-library/react-hooks';
-import useSticky from './path-to-useSticky'; // Update with the actual path to your useSticky hook
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+import React, {
+  useCallback,
+  useRef,
+  ReactNode,
+  HTMLProps,
+  MutableRefObject,
+  CSSProperties,
+} from 'react';
+import {
+  useTable,
+  usePagination,
+  useSortBy,
+  useGlobalFilter,
+  PluginHook,
+  TableOptions,
+  FilterType,
+  IdType,
+  Row,
+} from 'react-table';
+import { matchSorter, rankings } from 'match-sorter';
+import GlobalFilter, { GlobalFilterProps } from './components/GlobalFilter';
+import SelectPageSize, { SelectPageSizeProps, SizeOption } from './components/SelectPageSize';
+import SimplePagination from './components/Pagination';
+import useSticky from './hooks/useSticky';
+import { PAGE_SIZE_OPTIONS } from '../consts';
+import { ContextMenu, MenuItem, ContextMenuTrigger} from 'react-contextmenu';
+import copyTextToClipboard from '../../../../../../utils/copy';
+import { updateExternalFormData } from './utils/externalAPIs';
 
-// Mock the reducer actions and types
-const ReducerActions = {
-  init: 'init',
-  setStickyState: 'setStickyState',
-};
+export interface DataTableProps<D extends object> extends TableOptions<D> {
+  tableClassName?: string;
+  searchInput?: boolean | GlobalFilterProps<D>['searchInput'];
+  selectPageSize?: boolean | SelectPageSizeProps['selectRenderer'];
+  pageSizeOptions?: SizeOption[]; // available page size options
+  maxPageItemCount?: number;
+  hooks?: PluginHook<D>[]; // any additional hooks
+  width?: string | number;
+  height?: string | number;
+  serverPagination?: boolean;
+  exportAllData?: boolean;
+  hiddenColumns?: any;
+  onServerPaginationChange: (pageNumber: number, pageSize: number, filterValue: string) => void;
+  serverPaginationData: { pageSize?: number; currentPage?: number };
+  pageSize?: number;
+  noResults?: string | ((filterString: string) => ReactNode);
+  sticky?: boolean;
+  rowCount: number;
+  wrapperRef?: MutableRefObject<HTMLDivElement>;
+  metrics?: Array<String>;
+  onChangeFilter: (p: object) => void;
+  sliceId?: any
+}
 
-// Mock hooks object
-const mockHooks = {
-  useInstance: {
-    push: jest.fn(),
-  },
-  stateReducers: {
-    push: jest.fn(),
-  },
-};
+export interface RenderHTMLCellProps extends HTMLProps<HTMLTableCellElement> {
+  cellContent: ReactNode;
+}
 
-describe('useSticky Hook', () => {
-  it('should push useInstance and stateReducers into hooks', () => {
-    useSticky(mockHooks);
+// Be sure to pass our updateMyData and the skipReset option
+export default function DataTable<D extends object>({
+  tableClassName,
+  columns,
+  data,
+  serverPaginationData,
+  width: initialWidth = '100%',
+  height: initialHeight = 300,
+  pageSize: initialPageSize = 0,
+  initialState: initialState_ = {},
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
+  maxPageItemCount = 9,
+  sticky: doSticky,
+  searchInput = true,
+  hiddenColumns,
+  onServerPaginationChange,
+  rowCount,
+  selectPageSize,
+  noResults: noResultsText = 'No data found',
+  hooks,
+  serverPagination,
+  exportAllData,
+  wrapperRef: userWrapperRef,
+  metrics = [],
+  sliceId,
+  onChangeFilter,
+  ...moreUseTableOptions
+}: DataTableProps<D>): JSX.Element {
+  const tableHooks: PluginHook<D>[] = [
+    useGlobalFilter,
+    useSortBy,
+    usePagination,
+    doSticky ? useSticky : [],
+    hooks || [],
+  ].flat();
+  const resultsSize = serverPagination ? rowCount : data.length;
+  const sortByRef = useRef([]); // cache initial `sortby` so sorting doesn't trigger page reset
+  const pageSizeRef = useRef([initialPageSize, resultsSize]);
+  const hasPagination = initialPageSize > 0 && resultsSize > 0; // pageSize == 0 means no pagination
+  const hasGlobalControl = hasPagination || !!searchInput;
+  const initialState = {
+    ...initialState_,
+    // zero length means all pages, the `usePagination` plugin does not
+    // understand pageSize = 0
+    sortBy: sortByRef.current,
+    pageSize: initialPageSize > 0 ? initialPageSize : resultsSize || 10,
+    hiddenColumns: hiddenColumns
+  };
+  const defaultWrapperRef = useRef<HTMLDivElement>(null);
+  const cellValue = useRef('');
+  const globalControlRef = useRef<HTMLDivElement>(null);
+  const paginationRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = userWrapperRef || defaultWrapperRef;
+  const paginationData = JSON.stringify(serverPaginationData);
+  
+  function stripHtml(html)
+  {
+    //html = html.replace(/style=\".*"/gm,'');
+    let tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  }
 
-    // Assert that push was called for both useInstance and stateReducers
-    expect(mockHooks.useInstance.push).toHaveBeenCalledWith(expect.any(Function));
-    expect(mockHooks.stateReducers.push).toHaveBeenCalledWith(expect.any(Function));
-  });
+  const buildContextMenuJSX = () => (
+    <ContextMenu id={"sample-menu"+'-'+sliceId}>
+      <MenuItem
+        data={cellValue.current}
+        onClick={e => {
+          copyTextToClipboard(() => Promise.resolve(stripHtml(cellValue.current)))
+         }
+        }
+      >
+        Copy to clipboard &nbsp;{' '}
+      </MenuItem>
+    </ContextMenu>
+  );
 
-  it('should handle init action and set sticky state', () => {
-    const mockState = { sticky: {} };
-    const action = { type: ReducerActions.init };
+  const defaultGetTableSize = useCallback(() => {
+    if (wrapperRef.current) {
+      // `initialWidth` and `initialHeight` could be also parameters like `100%`
+      // `Number` reaturns `NaN` on them, then we fallback to computed size
+      const width = Number(initialWidth) || wrapperRef.current.clientWidth;
+      const height =
+        (Number(initialHeight) || wrapperRef.current.clientHeight) -
+        (globalControlRef.current?.clientHeight || 0) -
+        (paginationRef.current?.clientHeight || 0);
+      return { width, height };
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    initialHeight,
+    initialWidth,
+    wrapperRef,
+    hasPagination,
+    hasGlobalControl,
+    paginationRef,
+    resultsSize,
+    paginationData,
+  ]);
 
-    // Get the reducer pushed into stateReducers
-    const reducer = mockHooks.stateReducers.push.mock.calls[0][0];
+  const defaultGlobalFilter: FilterType<D> = useCallback(
+    (rows: Row<D>[], columnIds: IdType<D>[], filterValue: string) => {
+      // allow searching by "col1_value col2_value"
+      const joinedString = (row: Row<D>) => columnIds.map(x => row.values[x]).join(' ');
+      return matchSorter(rows, filterValue, {
+        keys: [...columnIds, joinedString],
+        threshold: rankings.ACRONYM,
+      }) as typeof rows;
+    },
+    [],
+  );
 
-    const newState = reducer(mockState, action, {});
+  const customGlobalFilter = ((rows: Row<D>[], columnIds: IdType<D>[], filterValue: string) => {
+    onServerPaginationChange(0, initialState?.pageSize, filterValue);
+    return rows;
+  })
 
-    // Check that sticky state is initialized
-    expect(newState).toEqual({
-      sticky: {},
-    });
-  });
 
-  it('should handle setStickyState action and update sticky state', () => {
-    const mockState = { sticky: {} };
-    const action = {
-      type: ReducerActions.setStickyState,
-      size: { top: 100, bottom: 200 },
-    };
+  const {
+    getTableProps,
+    getTableBodyProps,
+    prepareRow,
+    headerGroups,
+    footerGroups,
+    page,
+    pageCount,
+    gotoPage,
+    preGlobalFilteredRows,
+    setGlobalFilter,
+    setPageSize: setPageSize_,
+    wrapStickyTable,
+    state: { pageIndex, pageSize, globalFilter: filterValue, sticky = {} },
+  } = useTable<D>(
+    {
+      columns,
+      data,
+      initialState,
+      getTableSize: defaultGetTableSize,
+      globalFilter: serverPagination ? customGlobalFilter : defaultGlobalFilter,
+      ...moreUseTableOptions,
+    },
+    ...tableHooks,
+  );
+  // make setPageSize accept 0
+  const setPageSize = (size: number) => {
+    if (serverPagination) {
+      onServerPaginationChange(0, size, filterValue || serverPagination ? (serverPaginationData.filterValue ? serverPaginationData.filterValue : filterValue) : filterValue);
+    }
+    // keep the original size if data is empty
+    if (size || resultsSize !== 0) {
+      setPageSize_(size === 0 ? resultsSize : size);
+    }
+  };
 
-    // Get the reducer pushed into stateReducers
-    const reducer = mockHooks.stateReducers.push.mock.calls[0][0];
+  const noResults =
+    typeof noResultsText === 'function' ? noResultsText(filterValue as string) : noResultsText;
 
-    const newState = reducer(mockState, action, {
-      sticky: { top: 50 },
-    });
+  const getNoResults = () => <div className="dt-no-results">{noResults}</div>;
 
-    // Check that sticky state is updated correctly
-    expect(newState).toEqual({
-      sticky: {
-        top: 100,
-        bottom: 200,
-      },
-    });
-  });
+  if (!columns || columns.length === 0 && !serverPagination) {
+    return (wrapStickyTable ? wrapStickyTable(getNoResults) : getNoResults()) as JSX.Element;
+  }
 
-  it('should not update sticky state if size is missing', () => {
-    const mockState = { sticky: {} };
-    const action = {
-      type: ReducerActions.setStickyState,
-      size: null, // Missing size
-    };
+  const shouldRenderFooter = columns.some(x => !!x.Footer);
+  let crossFilters: Array<string> = [];
+  let updatedfilter = {} as any;
+  const renderTable = () => {
 
-    // Get the reducer pushed into stateReducers
-    const reducer = mockHooks.stateReducers.push.mock.calls[0][0];
+    return (
+      <table {...getTableProps({ className: tableClassName })}>
+        <thead>
+          {headerGroups.map(headerGroup => {
+            const { key: headerGroupKey, ...headerGroupProps } = headerGroup.getHeaderGroupProps();
+            return (
+              <tr key={headerGroupKey || headerGroup.id} {...headerGroupProps}>
+                {headerGroup.headers.map(column => 
+                
+                  column.render('Header', {
+                    key: column.id,
+                    ...column.getSortByToggleProps(),
+                  })
+                )}
+              </tr>
+            );
+          })}
+        </thead>
+        <tbody {...getTableBodyProps()}>
+          {page && page.length > 0 ? (
+            page.map(row => {
+              prepareRow(row);
+              const { key: rowKey, ...rowProps } = row.getRowProps();
+              return (
+                <tr key={rowKey || row.id} {...rowProps}>
+                  {row.cells.map(cell => {
+                    return (
+                      <>
+                        {/* Here added onClick function to get cell value */}
+                        <td
+                          onContextMenu={e => {
+                            e.preventDefault();
+                            cellValue.current = cell.value;
+                          }}
+                          onClick={e => {
+                            let cnt = 0;
+                            let columnName: string = '';
+                            for (let key in cell.row.original) {
+                              let tempCnt = parseInt(cell.column.id, 10);
+                              if (cnt === tempCnt) {
+                                columnName = key;
+                              }
+                              cnt++;
+                            }
 
-    const newState = reducer(mockState, action, {
-      sticky: { top: 50 },
-    });
+                            if (!metrics.includes(columnName)) {
+                              $('table tbody td').removeClass('bgColor');
+                              updatedfilter = { [columnName]: cell.row.original[columnName] }
+                              if (crossFilters[0]) {
+                                updatedfilter = { [crossFilters[0]]: null, ...updatedfilter };
+                              }
+                              if (crossFilters[1] == cell.row.original[columnName]) {
+                                updatedfilter[columnName] = null;
+                                crossFilters = [];
+                              }
+                              else {
+                                crossFilters = [columnName, cell.row.original[columnName]];
+                                $(e.currentTarget).addClass('bgColor');
+                              }
+                              onChangeFilter(updatedfilter)
+                            }
+                          }
+                          }
+                        >
+                          {cell.render('Cell')}
+                        </td>
+                      </>
+                    )
+                  })}
+                </tr>
+              );
+            })
+          ) : (
+            <tr>
+              <td className="dt-no-results" colSpan={columns.length}>
+                {noResults}
+              </td>
+            </tr>
+          )}
+        </tbody>
+        {shouldRenderFooter && (
+          <tfoot>
+            {footerGroups.map(footerGroup => {
+              const { key: footerGroupKey, ...footerGroupProps } = footerGroup.getHeaderGroupProps();
+              return (
+                <tr key={footerGroupKey || footerGroup.id} {...footerGroupProps}>
+                  {footerGroup.headers.map(column => column.render('Footer', { key: column.id }))}
+                </tr>
+              );
+            })}
+          </tfoot>
+        )}
+      </table>
+    )
+  }
 
-    // Check that sticky state remains unchanged
-    expect(newState).toEqual(mockState);
-  });
-});
+  // force update the pageSize when it's been update from the initial state
+  if (
+    pageSizeRef.current[0] !== initialPageSize ||
+    // when initialPageSize stays as zero, but total number of records changed,
+    // we'd also need to update page size
+    (initialPageSize === 0 && pageSizeRef.current[1] !== resultsSize)
+  ) {
+    pageSizeRef.current = [initialPageSize, resultsSize];
+    setPageSize(initialPageSize);
+  }
+
+  const paginationStyle: CSSProperties = sticky.height ? {} : { visibility: 'hidden' };
+
+  let resultPageCount = pageCount;
+  let resultCurrentPageSize = pageSize;
+  let resultCurrentPage = pageIndex;
+  let resultOnPageChange: (page: number) => void = gotoPage;
+  if (serverPagination) {
+    const serverPageSize = serverPaginationData.pageSize ?? initialPageSize;
+    resultPageCount = Math.ceil(rowCount / serverPageSize);
+    if (!Number.isFinite(resultPageCount)) {
+      resultPageCount = 0;
+    }
+    resultCurrentPageSize = serverPageSize;
+    const foundPageSizeIndex = pageSizeOptions.findIndex(
+      ([option]) => option >= resultCurrentPageSize,
+    );
+    if (foundPageSizeIndex === -1) {
+      resultCurrentPageSize = 0;
+    }
+    resultCurrentPage = serverPaginationData.currentPage ?? 0;
+    resultOnPageChange = (pageNumber: number) =>
+      onServerPaginationChange(pageNumber, serverPageSize, filterValue || serverPagination ? (serverPaginationData.filterValue ? serverPaginationData.filterValue : filterValue) : filterValue);
+  }
+  return (
+    <div ref={wrapperRef} style={{ width: initialWidth, height: initialHeight }}>
+      {hasGlobalControl ? (
+        <div ref={globalControlRef} className="form-inline dt-controls">
+          <div className="row">
+            <div className="col-sm-6">
+              {hasPagination ? (
+                <SelectPageSize
+                  total={resultsSize}
+                  current={resultCurrentPageSize}
+                  options={pageSizeOptions}
+                  selectRenderer={typeof selectPageSize === 'boolean' ? undefined : selectPageSize}
+                  onChange={setPageSize}
+                />
+              ) : null}
+            </div>
+            {searchInput ? (
+              <div className="col-sm-6">
+                <GlobalFilter<D>
+                  searchInput={typeof searchInput === 'boolean' ? undefined : searchInput}
+                  preGlobalFilteredRows={preGlobalFilteredRows}
+                  setGlobalFilter={setGlobalFilter}
+                  filterValue={filterValue || serverPagination ? (serverPaginationData.filterValue ? serverPaginationData.filterValue : filterValue) : filterValue}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+      <ContextMenuTrigger id={"sample-menu"+'-'+sliceId} holdToDisplay={-1}>
+      {wrapStickyTable ? wrapStickyTable(renderTable) : renderTable()}
+      </ContextMenuTrigger>
+      {hasPagination && resultPageCount > 1 ? (
+        <SimplePagination
+          ref={paginationRef}
+          style={paginationStyle}
+          maxPageItemCount={maxPageItemCount}
+          pageCount={resultPageCount}
+          currentPage={resultCurrentPage}
+          onPageChange={resultOnPageChange}
+        />
+      ) : null}
+      {buildContextMenuJSX()}
+    </div>
+  );
+}
