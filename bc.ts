@@ -1,54 +1,58 @@
-import datasourcesReducer from './datasourcesReducer';
-import { DatasourcesActionPayload, DatasourcesAction } from '../actions/datasources';
-import { DatasourcesState } from 'src/dashboard/types';
-import { keyBy } from 'lodash';
+import replaceUndefinedByNull from './replaceUndefinedByNull';
 
-describe('datasourcesReducer', () => {
-  const initialState: DatasourcesState = {
-    'datasource1': { uid: 'datasource1', name: 'Datasource 1' },
-    'datasource2': { uid: 'datasource2', name: 'Datasource 2' },
-  };
-
-  it('should handle SetDatasources action', () => {
-    const action: DatasourcesActionPayload = {
-      type: DatasourcesAction.SetDatasources,
-      datasources: [
-        { uid: 'datasource3', name: 'Datasource 3' },
-        { uid: 'datasource4', name: 'Datasource 4' },
-      ],
-    };
-
-    const expectedState = {
-      ...initialState,
-      datasource3: { uid: 'datasource3', name: 'Datasource 3' },
-      datasource4: { uid: 'datasource4', name: 'Datasource 4' },
-    };
-
-    expect(datasourcesReducer(initialState, action)).toEqual(expectedState);
+describe('replaceUndefinedByNull', () => {
+  it('should replace undefined with null in a flat object', () => {
+    const input = { key1: undefined, key2: 'value', key3: 123 };
+    const expectedOutput = { key1: null, key2: 'value', key3: 123 };
+    
+    expect(replaceUndefinedByNull(input)).toEqual(expectedOutput);
   });
 
-  it('should handle SetDatasource action', () => {
-    const action: DatasourcesActionPayload = {
-      type: DatasourcesAction.SetDatasource,
-      key: 'datasource1',
-      datasource: { uid: 'datasource1', name: 'Updated Datasource 1' },
+  it('should replace undefined with null in a nested object', () => {
+    const input = {
+      key1: undefined,
+      key2: { nestedKey1: undefined, nestedKey2: 'value' },
     };
-
-    const expectedState = {
-      ...initialState,
-      datasource1: { uid: 'datasource1', name: 'Updated Datasource 1' },
+    const expectedOutput = {
+      key1: null,
+      key2: { nestedKey1: null, nestedKey2: 'value' },
     };
-
-    expect(datasourcesReducer(initialState, action)).toEqual(expectedState);
+    
+    expect(replaceUndefinedByNull(input)).toEqual(expectedOutput);
   });
 
-  it('should return the initial state if action type is unknown', () => {
-    const action = { type: 'UNKNOWN_ACTION' };
-    expect(datasourcesReducer(initialState, action)).toEqual(initialState);
+  it('should handle arrays within the object', () => {
+    const input = { key1: [1, undefined, 3], key2: 'value' };
+    const expectedOutput = { key1: [1, null, 3], key2: 'value' };
+
+    expect(replaceUndefinedByNull(input)).toEqual(expectedOutput);
   });
 
-  it('should return an empty object if no initial state is provided and action type is unknown', () => {
-    const action = { type: 'UNKNOWN_ACTION' };
-    expect(datasourcesReducer(undefined, action)).toEqual({});
+  it('should return a deep clone of the object', () => {
+    const input = { key1: undefined, key2: { nestedKey1: undefined } };
+    const result = replaceUndefinedByNull(input);
+
+    expect(result).toEqual({
+      key1: null,
+      key2: { nestedKey1: null },
+    });
+
+    // Verify that the result is a deep clone
+    result.key2.nestedKey1 = 'new value';
+    expect(input.key2.nestedKey1).toBe(undefined); // original input remains unchanged
+  });
+
+  it('should return an empty object if input is empty', () => {
+    const input = {};
+    const expectedOutput = {};
+    
+    expect(replaceUndefinedByNull(input)).toEqual(expectedOutput);
+  });
+
+  it('should handle no undefined values', () => {
+    const input = { key1: 'value', key2: 123, key3: null };
+    const expectedOutput = { key1: 'value', key2: 123, key3: null };
+    
+    expect(replaceUndefinedByNull(input)).toEqual(expectedOutput);
   });
 });
