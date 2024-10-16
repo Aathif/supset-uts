@@ -1,119 +1,90 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
-import { useDispatch, useSelector } from 'react-redux';
-import { useHistory } from 'react-router-dom';
-import { useToasts } from 'src/components/MessageToasts/withToasts';
-import { useDashboard, useDashboardCharts, useDashboardDatasets } from 'src/hooks/apiResources';
-import { hydrateDashboard } from 'src/dashboard/actions/hydrate';
-import { setDatasources } from 'src/dashboard/actions/datasources';
-import { setDatasetsStatus } from 'src/dashboard/actions/dashboardState';
-import DashboardPage from './DashboardPage';
+import configureStore from 'redux-mock-store';
+import { Provider } from 'react-redux';
+import { bindActionCreators } from 'redux';
+import { fetchSlices, updateSlices } from '../actions/sliceEntities';
+import SliceAdder from '../components/SliceAdder';
+import ConnectedSliceAdder, { mapStateToProps, mapDispatchToProps } from './SliceAdder';
 
-// Mock necessary imports
-jest.mock('react-redux', () => ({
-  useDispatch: jest.fn(),
-  useSelector: jest.fn(),
-}));
-jest.mock('react-router-dom', () => ({
-  useHistory: jest.fn(),
-}));
-jest.mock('src/components/MessageToasts/withToasts', () => ({
-  useToasts: jest.fn(),
-}));
-jest.mock('src/hooks/apiResources', () => ({
-  useDashboard: jest.fn(),
-  useDashboardCharts: jest.fn(),
-  useDashboardDatasets: jest.fn(),
-}));
-jest.mock('src/dashboard/actions/hydrate', () => ({
-  hydrateDashboard: jest.fn(),
-}));
-jest.mock('src/dashboard/actions/datasources', () => ({
-  setDatasources: jest.fn(),
-}));
-jest.mock('src/dashboard/actions/dashboardState', () => ({
-  setDatasetsStatus: jest.fn(),
-}));
-jest.mock('src/dashboard/util/injectCustomCss', () => jest.fn());
-jest.mock('src/dashboard/containers/Dashboard', () => jest.fn(() => <div>DashboardContainer</div>));
-jest.mock('src/dashboard/components/DashboardBuilder/DashboardBuilder', () => jest.fn(() => <div>DashboardBuilder</div>));
+const mockStore = configureStore([]);
 
-describe('DashboardPage', () => {
-  const mockDispatch = jest.fn();
-  const mockHistory = jest.fn();
-  const mockAddDangerToast = jest.fn();
-  const mockUseSelector = jest.fn();
-  const mockUseDashboard = jest.fn();
-  const mockUseDashboardCharts = jest.fn();
-  const mockUseDashboardDatasets = jest.fn();
+jest.mock('../actions/sliceEntities', () => ({
+  fetchSlices: jest.fn(),
+  updateSlices: jest.fn(),
+}));
+
+describe('ConnectedSliceAdder', () => {
+  let store;
+  let initialState;
 
   beforeEach(() => {
-    (useDispatch as jest.Mock).mockReturnValue(mockDispatch);
-    (useHistory as jest.Mock).mockReturnValue(mockHistory);
-    (useToasts as jest.Mock).mockReturnValue({ addDangerToast: mockAddDangerToast });
-    (useSelector as jest.Mock).mockImplementation(mockUseSelector);
-    (useDashboard as jest.Mock).mockImplementation(mockUseDashboard);
-    (useDashboardCharts as jest.Mock).mockImplementation(mockUseDashboardCharts);
-    (useDashboardDatasets as jest.Mock).mockImplementation(mockUseDashboardDatasets);
+    initialState = {
+      sliceEntities: {
+        slices: [],
+        isLoading: false,
+        errorMessage: null,
+        lastUpdated: null,
+      },
+      dashboardInfo: {
+        userId: 1,
+        id: 100,
+      },
+      dashboardState: {
+        sliceIds: [1, 2],
+        editMode: true,
+      },
+    };
+    store = mockStore(initialState);
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('renders SliceAdder component with the correct props from Redux', () => {
+    render(
+      <Provider store={store}>
+        <ConnectedSliceAdder height={400} />
+      </Provider>,
+    );
+
+    expect(screen.getByText('Add Slice')).toBeInTheDocument(); // Assuming "Add Slice" is rendered in SliceAdder
   });
 
-  it('renders loading component when dashboard data is not ready', () => {
-    mockUseDashboard.mockReturnValue({ result: null });
-    mockUseDashboardCharts.mockReturnValue({ result: null });
+  it('mapStateToProps returns the correct props', () => {
+    const ownProps = { height: 400 };
+    const stateProps = mapStateToProps(initialState, ownProps);
 
-    render(<DashboardPage idOrSlug="1" />);
-    expect(screen.getByText('Loading')).toBeInTheDocument();
-  });
-
-  it('renders the dashboard components when data is ready', async () => {
-    mockUseDashboard.mockReturnValue({ result: { dashboard_title: 'Test Dashboard', id: 1 } });
-    mockUseDashboardCharts.mockReturnValue({ result: [] });
-    mockUseDashboardDatasets.mockReturnValue({ result: [], status: 'success' });
-    mockUseSelector.mockReturnValue(true);
-
-    render(<DashboardPage idOrSlug="1" />);
-
-    await waitFor(() => expect(screen.getByText('DashboardContainer')).toBeInTheDocument());
-    expect(screen.getByText('DashboardBuilder')).toBeInTheDocument();
-  });
-
-  it('dispatches the hydrateDashboard action when data is ready', async () => {
-    mockUseDashboard.mockReturnValue({ result: { dashboard_title: 'Test Dashboard', id: 1 } });
-    mockUseDashboardCharts.mockReturnValue({ result: [] });
-    mockUseDashboardDatasets.mockReturnValue({ result: [], status: 'success' });
-    mockUseSelector.mockReturnValue(true);
-
-    render(<DashboardPage idOrSlug="1" />);
-
-    await waitFor(() => {
-      expect(mockDispatch).toHaveBeenCalledWith(
-        hydrateDashboard({
-          history: mockHistory,
-          dashboard: { dashboard_title: 'Test Dashboard', id: 1 },
-          charts: [],
-          activeTabs: undefined,
-          dataMask: {},
-        })
-      );
+    expect(stateProps).toEqual({
+      height: 400,
+      userId: 1,
+      dashboardId: 100,
+      selectedSliceIds: [1, 2],
+      slices: [],
+      isLoading: false,
+      errorMessage: null,
+      lastUpdated: null,
+      editMode: true,
     });
   });
 
-  it('shows an error toast if there is a dataset API error', async () => {
-    mockUseDashboard.mockReturnValue({ result: { dashboard_title: 'Test Dashboard', id: 1 } });
-    mockUseDashboardCharts.mockReturnValue({ result: [] });
-    mockUseDashboardDatasets.mockReturnValue({ result: [], error: 'Error' });
-    mockUseSelector.mockReturnValue(true);
+  it('mapDispatchToProps returns the correct actions', () => {
+    const dispatch = jest.fn();
+    const props = mapDispatchToProps(dispatch);
 
-    render(<DashboardPage idOrSlug="1" />);
+    props.fetchSlices();
+    expect(fetchSlices).toHaveBeenCalled();
+
+    props.updateSlices();
+    expect(updateSlices).toHaveBeenCalled();
+  });
+
+  it('dispatches fetchSlices action when the component is rendered', async () => {
+    render(
+      <Provider store={store}>
+        <ConnectedSliceAdder height={400} />
+      </Provider>,
+    );
 
     await waitFor(() => {
-      expect(mockAddDangerToast).toHaveBeenCalledWith(
-        'Error loading chart datasources. Filters may not work correctly.',
-      );
+      expect(fetchSlices).toHaveBeenCalled();
     });
   });
 });
