@@ -1,18 +1,35 @@
-import { render, screen } from '@testing-library/react';
-import TableChart from './TableChart';
+import { DataRecordValue, TimeFormatFunction } from '@superset-ui/core';
 
-test('renders table with correct data', () => {
-  const props = {
-    height: 500,
-    width: 800,
-    data: [{ name: 'Item 1', value: 10 }, { name: 'Item 2', value: 20 }],
-    columns: [{ key: 'name', label: 'Name' }, { key: 'value', label: 'Value', isNumeric: true }],
-  };
+const REGEXP_TIMESTAMP_NO_TIMEZONE = /T(\d{2}:){2}\d{2}$/;
 
-  render(<TableChart {...props} />);
+/**
+ * Extended Date object with a custom formatter, and retains the original input
+ * when the formatter is simple `String(..)`.
+ */
+export default class DateWithFormatter extends Date {
+  formatter: TimeFormatFunction;
 
-  expect(screen.getByText('Item 1')).toBeInTheDocument();
-  expect(screen.getByText('Item 2')).toBeInTheDocument();
-  expect(screen.getByText('Name')).toBeInTheDocument();
-  expect(screen.getByText('Value')).toBeInTheDocument();
-});
+  input: DataRecordValue;
+
+  constructor(
+    input: DataRecordValue,
+    { formatter = String, forceUTC = true }: { formatter?: TimeFormatFunction; forceUTC?: boolean },
+  ) {
+    let value = input;
+    // assuming timestamps without a timezone is in UTC time
+    if (forceUTC && typeof value === 'string' && REGEXP_TIMESTAMP_NO_TIMEZONE.test(value)) {
+      value = `${value}Z`;
+    }
+
+    super(value as string);
+
+    this.input = input;
+    this.formatter = formatter;
+    this.toString = (): string => {
+      if (this.formatter === String) {
+        return String(this.input);
+      }
+      return this.formatter ? this.formatter(this) : Date.toString.call(this);
+    };
+  }
+}
