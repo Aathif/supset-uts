@@ -1,33 +1,66 @@
-import { cleanColorInput, TIME_SHIFT_PATTERN } from './path_to_function';
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import HeaderWithRadioGroup, { HeaderWithRadioGroupProps } from './HeaderWithRadioGroup';
+import { ThemeProvider } from '@superset-ui/core';
+import { supersetTheme } from 'src/themes';
 
-describe('cleanColorInput', () => {
-  it('should trim the input string and remove " (right axis)"', () => {
-    const input = 'ColorName (right axis)';
-    const result = cleanColorInput(input);
-    expect(result).toBe('ColorName');
+const renderWithTheme = (ui: React.ReactElement) => {
+  return render(<ThemeProvider theme={supersetTheme}>{ui}</ThemeProvider>);
+};
+
+describe('HeaderWithRadioGroup', () => {
+  const defaultProps: HeaderWithRadioGroupProps = {
+    headerTitle: 'Test Header',
+    groupTitle: 'Test Group',
+    groupOptions: [
+      { label: 'Option 1', value: 'option1' },
+      { label: 'Option 2', value: 'option2' },
+    ],
+    value: 'option1',
+    onChange: jest.fn(),
+  };
+
+  it('renders the header title correctly', () => {
+    renderWithTheme(<HeaderWithRadioGroup {...defaultProps} />);
+    expect(screen.getByText('Test Header')).toBeInTheDocument();
   });
 
-  it('should filter out parts that do not match the TIME_SHIFT_PATTERN', () => {
-    const input = 'ColorName 1 week offset, 5 minutes offset, invalid time, Color2';
-    const result = cleanColorInput(input.split(', '));
-    expect(result).toBe('1 week offset, 5 minutes offset');
+  it('opens the popover and renders the radio group options', () => {
+    renderWithTheme(<HeaderWithRadioGroup {...defaultProps} />);
+
+    // Click the settings icon to open the popover
+    fireEvent.click(screen.getByRole('img', { name: 'setting' }));
+
+    // Check if the popover contains the group title and radio options
+    expect(screen.getByText('Test Group')).toBeInTheDocument();
+    expect(screen.getByText('Option 1')).toBeInTheDocument();
+    expect(screen.getByText('Option 2')).toBeInTheDocument();
   });
 
-  it('should handle an empty input gracefully', () => {
-    const input = '';
-    const result = cleanColorInput(input);
-    expect(result).toBe('');
+  it('calls the onChange handler when a radio option is selected', () => {
+    const onChangeMock = jest.fn();
+    renderWithTheme(<HeaderWithRadioGroup {...defaultProps} onChange={onChangeMock} />);
+
+    // Open the popover
+    fireEvent.click(screen.getByRole('img', { name: 'setting' }));
+
+    // Select "Option 2"
+    fireEvent.click(screen.getByLabelText('Option 2'));
+
+    // Ensure the onChange handler is called with the correct value
+    expect(onChangeMock).toHaveBeenCalledWith('option2');
   });
 
-  it('should handle input with no " (right axis)" or time shift pattern', () => {
-    const input = 'ColorName, Color2, Color3';
-    const result = cleanColorInput(input.split(', '));
-    expect(result).toBe('');
-  });
+  it('closes the popover after a selection', () => {
+    renderWithTheme(<HeaderWithRadioGroup {...defaultProps} />);
 
-  it('should handle input with multiple valid and invalid time shifts', () => {
-    const input = '2 days offset, some text, 3 hours offset, (right axis)';
-    const result = cleanColorInput(input.split(', '));
-    expect(result).toBe('2 days offset, 3 hours offset');
+    // Open the popover
+    fireEvent.click(screen.getByRole('img', { name: 'setting' }));
+
+    // Select "Option 2"
+    fireEvent.click(screen.getByLabelText('Option 2'));
+
+    // Ensure the popover is no longer visible
+    expect(screen.queryByText('Test Group')).not.toBeInTheDocument();
   });
 });
