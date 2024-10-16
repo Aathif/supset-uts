@@ -1,69 +1,54 @@
-import { getInitialState } from './nativeFilterReducer';
-import { NativeFiltersState, FilterConfiguration } from '@superset-ui/core';
+import datasourcesReducer from './datasourcesReducer';
+import { DatasourcesActionPayload, DatasourcesAction } from '../actions/datasources';
+import { DatasourcesState } from 'src/dashboard/types';
+import { keyBy } from 'lodash';
 
-describe('getInitialState', () => {
-  it('should return initial state when filterConfig is provided', () => {
-    const filterConfig: FilterConfiguration = [
-      { id: 'filter1', name: 'Filter 1' },
-      { id: 'filter2', name: 'Filter 2' },
-    ];
+describe('datasourcesReducer', () => {
+  const initialState: DatasourcesState = {
+    'datasource1': { uid: 'datasource1', name: 'Datasource 1' },
+    'datasource2': { uid: 'datasource2', name: 'Datasource 2' },
+  };
 
-    const initialState = getInitialState({ filterConfig });
-
-    expect(initialState).toEqual({
-      filters: {
-        filter1: { id: 'filter1', name: 'Filter 1' },
-        filter2: { id: 'filter2', name: 'Filter 2' },
-      },
-      focusedFilterId: undefined,
-    });
-  });
-
-  it('should return previous state when no filterConfig is provided', () => {
-    const prevState: NativeFiltersState = {
-      filters: {
-        filter1: { id: 'filter1', name: 'Filter 1' },
-      },
-      focusedFilterId: 'filter1',
+  it('should handle SetDatasources action', () => {
+    const action: DatasourcesActionPayload = {
+      type: DatasourcesAction.SetDatasources,
+      datasources: [
+        { uid: 'datasource3', name: 'Datasource 3' },
+        { uid: 'datasource4', name: 'Datasource 4' },
+      ],
     };
 
-    const initialState = getInitialState({ state: prevState });
-
-    expect(initialState).toEqual({
-      filters: {
-        filter1: { id: 'filter1', name: 'Filter 1' },
-      },
-      focusedFilterId: undefined,
-    });
-  });
-
-  it('should return an empty filters object when neither filterConfig nor prevState is provided', () => {
-    const initialState = getInitialState({});
-
-    expect(initialState).toEqual({
-      filters: {},
-      focusedFilterId: undefined,
-    });
-  });
-
-  it('should prioritize filterConfig over prevState when both are provided', () => {
-    const filterConfig: FilterConfiguration = [
-      { id: 'filter2', name: 'Filter 2' },
-    ];
-    const prevState: NativeFiltersState = {
-      filters: {
-        filter1: { id: 'filter1', name: 'Filter 1' },
-      },
-      focusedFilterId: 'filter1',
+    const expectedState = {
+      ...initialState,
+      datasource3: { uid: 'datasource3', name: 'Datasource 3' },
+      datasource4: { uid: 'datasource4', name: 'Datasource 4' },
     };
 
-    const initialState = getInitialState({ filterConfig, state: prevState });
+    expect(datasourcesReducer(initialState, action)).toEqual(expectedState);
+  });
 
-    expect(initialState).toEqual({
-      filters: {
-        filter2: { id: 'filter2', name: 'Filter 2' },
-      },
-      focusedFilterId: undefined,
-    });
+  it('should handle SetDatasource action', () => {
+    const action: DatasourcesActionPayload = {
+      type: DatasourcesAction.SetDatasource,
+      key: 'datasource1',
+      datasource: { uid: 'datasource1', name: 'Updated Datasource 1' },
+    };
+
+    const expectedState = {
+      ...initialState,
+      datasource1: { uid: 'datasource1', name: 'Updated Datasource 1' },
+    };
+
+    expect(datasourcesReducer(initialState, action)).toEqual(expectedState);
+  });
+
+  it('should return the initial state if action type is unknown', () => {
+    const action = { type: 'UNKNOWN_ACTION' };
+    expect(datasourcesReducer(initialState, action)).toEqual(initialState);
+  });
+
+  it('should return an empty object if no initial state is provided and action type is unknown', () => {
+    const action = { type: 'UNKNOWN_ACTION' };
+    expect(datasourcesReducer(undefined, action)).toEqual({});
   });
 });
