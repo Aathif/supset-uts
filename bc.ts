@@ -1,108 +1,33 @@
-import buildQuery from './buildQuery';
-import { buildQueryContext, getMetricLabel } from '@superset-ui/core';
+import { cleanColorInput, TIME_SHIFT_PATTERN } from './path_to_function';
 
-jest.mock('@superset-ui/core', () => ({
-  buildQueryContext: jest.fn(),
-  getMetricLabel: jest.fn(metric => metric.label || metric),
-}));
-
-describe('buildQuery', () => {
-  const formData = {
-    adhoc_filters: [{ clause: 'WHERE', expressionType: 'SIMPLE', subject: 'value', operator: '==', comparator: '1' }],
-    adhoc_filters_b: [{ clause: 'WHERE', expressionType: 'SIMPLE', subject: 'value_b', operator: '==', comparator: '1' }],
-    groupby: ['category'],
-    groupby_b: ['subcategory'],
-    limit: 10,
-    limit_b: 5,
-    timeseries_limit_metric: { label: 'sum__value' },
-    timeseries_limit_metric_b: { label: 'sum__value_b' },
-    metrics: [{ label: 'sum__value' }],
-    metrics_b: [{ label: 'sum__value_b' }],
-    order_desc: true,
-    order_desc_b: false,
-  };
-
-  const mockQueryContext = (formData) => ({
-    queries: [{
-      metrics: formData.metrics || [],
-      is_timeseries: formData.is_timeseries,
-      post_processing: [{
-        operation: 'pivot',
-        options: {
-          index: ['__timestamp'],
-          columns: formData.columns || [],
-          aggregates: Object.fromEntries(
-            formData.metrics.map(metric => [
-              getMetricLabel(metric),
-              { operator: 'sum' },
-            ]),
-          ),
-        },
-      }],
-    }],
+describe('cleanColorInput', () => {
+  it('should trim the input string and remove " (right axis)"', () => {
+    const input = 'ColorName (right axis)';
+    const result = cleanColorInput(input);
+    expect(result).toBe('ColorName');
   });
 
-  beforeEach(() => {
-    (buildQueryContext as jest.Mock).mockImplementation(mockQueryContext);
+  it('should filter out parts that do not match the TIME_SHIFT_PATTERN', () => {
+    const input = 'ColorName 1 week offset, 5 minutes offset, invalid time, Color2';
+    const result = cleanColorInput(input.split(', '));
+    expect(result).toBe('1 week offset, 5 minutes offset');
   });
 
-  it('should build query context for both formData1 and formData2', () => {
-    const queryContext = buildQuery(formData);
-
-    // Verify formData1 query context
-    expect(buildQueryContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        adhoc_filters: formData.adhoc_filters,
-        columns: formData.groupby,
-        limit: formData.limit,
-        timeseries_limit_metric: formData.timeseries_limit_metric,
-        metrics: formData.metrics,
-        order_desc: formData.order_desc,
-      }),
-      expect.any(Function)
-    );
-
-    // Verify formData2 query context
-    expect(buildQueryContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        adhoc_filters: formData.adhoc_filters_b,
-        columns: formData.groupby_b,
-        limit: formData.limit_b,
-        timeseries_limit_metric: formData.timeseries_limit_metric_b,
-        metrics: formData.metrics_b,
-        order_desc: formData.order_desc_b,
-      }),
-      expect.any(Function)
-    );
-
-    // Verify the combined query context
-    expect(queryContext).toEqual({
-      queries: expect.any(Array),
-    });
-
-    // Check the number of queries generated
-    expect(queryContext.queries).toHaveLength(2);
+  it('should handle an empty input gracefully', () => {
+    const input = '';
+    const result = cleanColorInput(input);
+    expect(result).toBe('');
   });
 
-  it('should create pivot post-processing for both queries', () => {
-    const queryContext = buildQuery(formData);
+  it('should handle input with no " (right axis)" or time shift pattern', () => {
+    const input = 'ColorName, Color2, Color3';
+    const result = cleanColorInput(input.split(', '));
+    expect(result).toBe('');
+  });
 
-    queryContext.queries.forEach(query => {
-      const postProcessing = query.post_processing[0];
-      expect(postProcessing).toEqual({
-        operation: 'pivot',
-        options: {
-          index: ['__timestamp'],
-          columns: expect.any(Array),
-          aggregates: expect.any(Object),
-        },
-      });
-
-      // Ensure pivot aggregates are correct
-      expect(postProcessing.options.aggregates).toEqual({
-        'sum__value': { operator: 'sum' },
-        'sum__value_b': { operator: 'sum' },
-      });
-    });
+  it('should handle input with multiple valid and invalid time shifts', () => {
+    const input = '2 days offset, some text, 3 hours offset, (right axis)';
+    const result = cleanColorInput(input.split(', '));
+    expect(result).toBe('2 days offset, 3 hours offset');
   });
 });
