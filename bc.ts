@@ -1,42 +1,102 @@
-import { guessFrame } from './path-to-your-file';  // adjust the import as necessary
-import { COMMON_RANGE_VALUES_SET, CALENDAR_RANGE_VALUES_SET, NO_TIME_RANGE } from './path-to-your-constants'; // adjust
-import { customTimeRangeDecode } from './path-to-your-utils'; // adjust
+import { fetchTimeRange } from './path-to-your-file';  // adjust the import as necessary
+import { SupersetClient } from '@superset-ui/core';
+import rison from 'rison';
+import { buildTimeRangeString, formatTimeRange, getClientErrorObject } from './path-to-your-utils';  // adjust imports as necessary
 
-// Mock customTimeRangeDecode
-jest.mock('./path-to-your-utils', () => ({
-  customTimeRangeDecode: jest.fn(),
+jest.mock('@superset-ui/core', () => ({
+  SupersetClient: {
+    get: jest.fn(),
+  },
 }));
 
-describe('guessFrame', () => {
-  it('returns "Common" if timeRange is in COMMON_RANGE_VALUES_SET', () => {
-    const commonTimeRange = 'Last week';
-    COMMON_RANGE_VALUES_SET.add(commonTimeRange);
+jest.mock('rison', () => ({
+  encode_uri: jest.fn(),
+}));
 
-    expect(guessFrame(commonTimeRange)).toBe('Common');
+jest.mock('./path-to-your-utils', () => ({
+  buildTimeRangeString: jest.fn(),
+  formatTimeRange: jest.fn(),
+  getClientErrorObject: jest.fn(),
+}));
+
+describe('fetchTimeRange', () => {
+  const mockTimeRange = 'last_week';
+  const mockColumnPlaceholder = 'my_col';
+  const mockEncodedQuery = 'encoded_time_range';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    rison.encode_uri.mockReturnValue(mockEncodedQuery);
   });
 
-  it('returns "Calendar" if timeRange is in CALENDAR_RANGE_VALUES_SET', () => {
-    const calendarTimeRange = '2023-01-01 to 2023-12-31';
-    CALENDAR_RANGE_VALUES_SET.add(calendarTimeRange);
+  it('should return formatted time range value on successful API call', async () => {
+    const mockApiResponse = {
+      json: {
+        result: {
+          since: '2023-01-01',
+          until: '2023-01-07',
+        },
+      },
+    };
+    const mockTimeRangeString = '2023-01-01 - 2023-01-07';
+    SupersetClient.get.mockResolvedValue(mockApiResponse);
+    buildTimeRangeString.mockReturnValue(mockTimeRangeString);
+    formatTimeRange.mockReturnValue('Formatted Time Range');
 
-    expect(guessFrame(calendarTimeRange)).toBe('Calendar');
+    const result = await fetchTimeRange(mockTimeRange, mockColumnPlaceholder);
+
+    expect(rison.encode_uri).toHaveBeenCalledWith(mockTimeRange);
+    expect(SupersetClient.get).toHaveBeenCalledWith({
+      endpoint: `/api/v1/time_range/?q=${mockEncodedQuery}`,
+    });
+    expect(buildTimeRangeString).toHaveBeenCalledWith(
+      mockApiResponse.json.result.since,
+      mockApiResponse.json.result.until,
+    );
+    expect(formatTimeRange).toHaveBeenCalledWith(
+      mockTimeRangeString,
+      mockColumnPlaceholder,
+    );
+    expect(result).toEqual({ value: 'Formatted Time Range' });
   });
 
-  it('returns "No filter" if timeRange is NO_TIME_RANGE', () => {
-    expect(guessFrame(NO_TIME_RANGE)).toBe('No filter');
+  it('should return error message on API failure', async () => {
+    const mockErrorResponse = {
+      statusText: 'Internal Server Error',
+    };
+    const mockClientError = {
+      message: 'Error fetching time range',
+    };
+    SupersetClient.get.mockRejectedValue(mockErrorResponse);
+    getClientErrorObject.mockResolvedValue(mockClientError);
+
+    const result = await fetchTimeRange(mockTimeRange, mockColumnPlaceholder);
+
+    expect(SupersetClient.get).toHaveBeenCalledWith({
+      endpoint: `/api/v1/time_range/?q=${mockEncodedQuery}`,
+    });
+    expect(getClientErrorObject).toHaveBeenCalledWith(mockErrorResponse);
+    expect(result).toEqual({
+      error: mockClientError.message,
+    });
   });
 
-  it('returns "Custom" if customTimeRangeDecode returns matchedFlag as true', () => {
-    const customTimeRange = 'Last 5 days';
-    (customTimeRangeDecode as jest.Mock).mockReturnValue({ matchedFlag: true });
+  it('should handle missing since and until in response', async () => {
+    const mockApiResponse = {
+      json: {
+        result: {
+          since: '',
+          until: '',
+        },
+      },
+    };
+    SupersetClient.get.mockResolvedValue(mockApiResponse);
+    buildTimeRangeString.mockReturnValue('');
+    formatTimeRange.mockReturnValue('Formatted Time Range');
 
-    expect(guessFrame(customTimeRange)).toBe('Custom');
-  });
+    const result = await fetchTimeRange(mockTimeRange, mockColumnPlaceholder);
 
-  it('returns "Advanced" if none of the conditions are met', () => {
-    const advancedTimeRange = 'Special Custom Time';
-    (customTimeRangeDecode as jest.Mock).mockReturnValue({ matchedFlag: false });
-
-    expect(guessFrame(advancedTimeRange)).toBe('Advanced');
+    expect(buildTimeRangeString).toHaveBeenCalledWith('', '');
+    expect(result).toEqual({ value: 'Formatted Time Range' });
   });
 });
