@@ -1,41 +1,45 @@
 import React from 'react';
-import { getNumberFormatter, t, tn } from '@superset-ui/core';
-
+import { shallow } from 'enzyme';
+import RowCountLabel from './RowCountLabel';
 import Label from 'src/components/Label';
 import { Tooltip } from 'src/components/Tooltip';
+import { getNumberFormatter } from '@superset-ui/core';
 
-type RowCountLabelProps = {
-  rowcount?: number;
-  limit?: number;
-  loading?: boolean;
-};
+// Mock getNumberFormatter
+jest.mock('@superset-ui/core', () => ({
+  getNumberFormatter: jest.fn().mockReturnValue(() => (value) => String(value)),
+  t: jest.fn((str) => str),
+  tn: jest.fn((single, plural, count) => (count === 1 ? single : plural)),
+}));
 
-const limitReachedMsg = t(
-  'The row limit set for the chart was reached. The chart may show partial data.',
-);
+describe('RowCountLabel', () => {
+  it('renders loading state', () => {
+    const wrapper = shallow(<RowCountLabel loading />);
+    expect(wrapper.find(Label).dive().text()).toEqual('Loading...');
+  });
 
-export default function RowCountLabel(props: RowCountLabelProps) {
-  const { rowcount = 0, limit = null, loading } = props;
-  const limitReached = limit && rowcount >= limit;
-  const type =
-    limitReached || (rowcount === 0 && !loading) ? 'danger' : 'default';
-  const formattedRowCount = getNumberFormatter()(rowcount);
-  const label = (
-    <Label type={type}>
-      {loading ? (
-        t('Loading...')
-      ) : (
-        <span data-test="row-count-label">
-          {tn('%s row', '%s rows', rowcount, formattedRowCount)}
-        </span>
-      )}
-    </Label>
-  );
-  return limitReached ? (
-    <Tooltip id="tt-rowcount-tooltip" title={<span>{limitReachedMsg}</span>}>
-      {label}
-    </Tooltip>
-  ) : (
-    label
-  );
-}
+  it('renders danger label when rowcount exceeds limit', () => {
+    const wrapper = shallow(<RowCountLabel rowcount={100} limit={50} />);
+    expect(wrapper.find(Label).prop('type')).toEqual('danger');
+    expect(wrapper.find(Tooltip).exists()).toBe(true); // Tooltip is shown
+  });
+
+  it('renders default label when within limit', () => {
+    const wrapper = shallow(<RowCountLabel rowcount={10} limit={50} />);
+    expect(wrapper.find(Label).prop('type')).toEqual('default');
+    expect(wrapper.find(Tooltip).exists()).toBe(false); // No Tooltip
+  });
+
+  it('renders correct formatted row count', () => {
+    getNumberFormatter.mockReturnValue(() => (value) => `formatted(${value})`);
+    const wrapper = shallow(<RowCountLabel rowcount={100} />);
+    expect(wrapper.find('[data-test="row-count-label"]').text()).toContain(
+      'formatted(100)',
+    );
+  });
+
+  it('shows tooltip when rowcount equals limit', () => {
+    const wrapper = shallow(<RowCountLabel rowcount={50} limit={50} />);
+    expect(wrapper.find(Tooltip).exists()).toBe(true);
+  });
+});
