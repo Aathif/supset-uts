@@ -1,59 +1,92 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { CalendarFrame } from './path-to-your-CalendarFrame';
-import { CALENDAR_RANGE_OPTIONS, CalendarRangeType, PreviousCalendarWeek } from 'src/explore/components/controls/DateFilterControl/utils';
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useTabId } from './path-to-your-useTabId'; // Adjust the import path
+import shortid from 'shortid';
 
-describe('CalendarFrame Component', () => {
-  const defaultProps = {
-    value: 'Last week', // This should be a valid CalendarRangeType for the test
-    onChange: jest.fn(),
-  };
+// Mocking localStorage and sessionStorage
+const mockSetItem = jest.fn();
+const mockGetItem = jest.fn();
+const mockPostMessage = jest.fn();
 
-  it('should render the component correctly with valid props', () => {
-    render(<CalendarFrame {...defaultProps} />);
+const mockBroadcastChannel = {
+  postMessage: mockPostMessage,
+  onmessage: jest.fn(),
+};
 
-    // Verify that the section title is rendered
-    expect(screen.getByText('Configure Time Range: Previous...')).toBeInTheDocument();
+beforeEach(() => {
+  jest.clearAllMocks();
+  // Mock the localStorage and sessionStorage
+  Object.defineProperty(window, 'localStorage', {
+    value: {
+      setItem: mockSetItem,
+      getItem: mockGetItem,
+    },
+    writable: true,
+  });
+  Object.defineProperty(window, 'sessionStorage', {
+    value: {
+      setItem: mockSetItem,
+      getItem: mockGetItem,
+    },
+    writable: true,
+  });
+  // Mocking the BroadcastChannel
+  (global as any).BroadcastChannel = jest.fn().mockImplementation(() => mockBroadcastChannel);
+});
 
-    // Verify that all radio buttons are rendered with correct labels
-    CALENDAR_RANGE_OPTIONS.forEach(({ label }) => {
-      expect(screen.getByLabelText(label)).toBeInTheDocument();
+describe('useTabId Hook', () => {
+  it('should generate a tab ID using shortid when storage is unavailable', () => {
+    const { result } = renderHook(() => useTabId());
+
+    expect(result.current).toBeUndefined(); // Initially undefined
+    expect(shortid.generate).toHaveBeenCalled(); // Verify shortid is called
+  });
+
+  it('should use sessionStorage to get the existing tab ID', () => {
+    const existingTabId = 'existingTabId';
+    mockGetItem.mockReturnValueOnce(existingTabId); // Mock sessionStorage to return existing ID
+
+    const { result } = renderHook(() => useTabId());
+
+    expect(result.current).toEqual(existingTabId); // Verify the existing tab ID is used
+    expect(mockPostMessage).toHaveBeenCalledWith({
+      type: 'REQUESTING_TAB_ID',
+      tabId: existingTabId,
     });
   });
 
-  it('should call onChange with PreviousCalendarWeek when an invalid value is provided', () => {
-    const customProps = { ...defaultProps, value: 'Invalid value' }; // Using an invalid value
-    render(<CalendarFrame {...customProps} />);
+  it('should update tab ID in session and local storage', () => {
+    const { result } = renderHook(() => useTabId());
 
-    // Verify that onChange is called with PreviousCalendarWeek
-    expect(customProps.onChange).toHaveBeenCalledWith(PreviousCalendarWeek);
+    act(() => {
+      // Simulating an update in the tab ID
+      mockGetItem.mockReturnValueOnce(null); // Simulate no existing ID
+      expect(mockSetItem).toHaveBeenCalledWith('tab_id', expect.any(String)); // Check tab ID is set
+      expect(mockSetItem).toHaveBeenCalledWith('last_tab_id', expect.any(String)); // Check last tab ID is set
+    });
   });
 
-  it('should not render the component when an invalid value is provided', () => {
-    const customProps = { ...defaultProps, value: 'Invalid value' }; // Using an invalid value
-    const { container } = render(<CalendarFrame {...customProps} />);
+  it('should handle broadcast messages for tab ID', () => {
+    const { result } = renderHook(() => useTabId());
+    const tabId = 'someTabId';
+    act(() => {
+      mockBroadcastChannel.onmessage({
+        tabId: 'anotherTabId',
+        type: 'REQUESTING_TAB_ID',
+      });
+    });
 
-    // The component should not render anything
-    expect(container).toBeEmptyDOMElement();
-  });
+    expect(mockPostMessage).toHaveBeenCalledWith({
+      type: 'TAB_ID_DENIED',
+      tabId: 'anotherTabId',
+    });
 
-  it('should call onChange when a different option is selected', () => {
-    render(<CalendarFrame {...defaultProps} />);
+    act(() => {
+      mockBroadcastChannel.onmessage({
+        tabId: 'someTabId',
+        type: 'TAB_ID_DENIED',
+      });
+    });
 
-    // Select a different radio button
-    const newRange = CALENDAR_RANGE_OPTIONS[1].value; // Choose the second option
-    const newRangeRadio = screen.getByLabelText(CALENDAR_RANGE_OPTIONS[1].label);
-    fireEvent.click(newRangeRadio);
-
-    // Verify that onChange is called with the selected value
-    expect(defaultProps.onChange).toHaveBeenCalledWith(newRange);
-  });
-
-  it('should default to PreviousCalendarWeek if an invalid value is initially set', () => {
-    const customProps = { ...defaultProps, value: 'Invalid value' }; // Using an invalid value
-    render(<CalendarFrame {...customProps} />);
-
-    // Verify that onChange was called with PreviousCalendarWeek
-    expect(customProps.onChange).toHaveBeenCalledWith(PreviousCalendarWeek);
+    expect(mockSetItem).toHaveBeenCalled(); // Check that tab ID is updated again
   });
 });
