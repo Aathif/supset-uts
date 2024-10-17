@@ -1,98 +1,130 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { ThemeProvider } from '@superset-ui/core';
-import DateFunctionTooltip from './path-to-your-DateFunctionTooltip';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { useSelector } from 'react-redux';
+import { CustomFrame } from './path-to-your-CustomFrame';
+import { t } from '@superset-ui/core';
 
-// Mocking Tooltip component
-jest.mock('src/components/Tooltip', () => ({
-  Tooltip: ({ title, overlayClassName, ...props }: any) => (
-    <div role="tooltip" className={overlayClassName} {...props}>
-      {title}
-    </div>
-  ),
+// Mocking the required parts of the component
+jest.mock('react-redux', () => ({
+  useSelector: jest.fn(),
 }));
 
-describe('DateFunctionTooltip', () => {
-  const theme = {
-    gridUnit: 4,
-    typography: {
-      sizes: {
-        s: 12,
-        m: 16,
-      },
-      weights: {
-        bold: 700,
-      },
-    },
+jest.mock('src/components/Select/Select', () => ({ options, onChange, value }: any) => (
+  <select value={value} onChange={e => onChange(e.target.value)} data-testid="select">
+    {options.map((option: any) => (
+      <option key={option.value} value={option.value}>
+        {option.label}
+      </option>
+    ))}
+  </select>
+));
+
+jest.mock('src/components/DatePicker', () => ({ onChange, value, locale }: any) => (
+  <input
+    type="datetime-local"
+    onChange={e => onChange(e.target.value)}
+    value={value}
+    data-testid="datepicker"
+  />
+));
+
+jest.mock('src/components/Input', () => ({ value, onChange }: any) => (
+  <input
+    type="number"
+    value={value}
+    onChange={e => onChange(Number(e.target.value))}
+    data-testid="inputnumber"
+  />
+));
+
+jest.mock('@superset-ui/chart-controls', () => ({
+  InfoTooltipWithTrigger: () => <div data-testid="tooltip">Tooltip</div>,
+}));
+
+describe('CustomFrame Component', () => {
+  const defaultProps = {
+    value: 'custom-range',
+    onChange: jest.fn(),
   };
 
-  const renderWithTheme = (props = {}) => {
-    return render(
-      <ThemeProvider theme={theme}>
-        <DateFunctionTooltip {...props} />
-      </ThemeProvider>,
+  beforeEach(() => {
+    (useSelector as jest.Mock).mockReturnValue('en'); // Mocking locale state
+  });
+
+  it('should render the component correctly', () => {
+    render(<CustomFrame {...defaultProps} />);
+
+    // Verify that key elements are rendered
+    expect(screen.getByText(t('Configure custom time range'))).toBeInTheDocument();
+    expect(screen.getByText(t('START (INCLUSIVE)'))).toBeInTheDocument();
+    expect(screen.getByText(t('END (EXCLUSIVE)'))).toBeInTheDocument();
+    expect(screen.getByTestId('tooltip')).toBeInTheDocument();
+  });
+
+  it('should render the date pickers when mode is set to "specific"', () => {
+    const customRange = {
+      sinceMode: 'specific',
+      sinceDatetime: '2020-01-01T00:00:00',
+      untilMode: 'specific',
+      untilDatetime: '2020-01-02T00:00:00',
+    };
+
+    render(<CustomFrame {...defaultProps} value={customRange} />);
+
+    // Check if date pickers for specific mode are rendered
+    const sinceDatePicker = screen.getByTestId('datepicker');
+    fireEvent.change(sinceDatePicker, { target: { value: '2020-01-01T00:00:00' } });
+    expect(defaultProps.onChange).toHaveBeenCalledWith(
+      expect.stringContaining('2020-01-01T00:00:00'),
     );
-  };
-
-  it('should render the tooltip correctly', () => {
-    renderWithTheme();
-
-    // Verify that the tooltip content is rendered correctly
-    expect(screen.getByRole('tooltip')).toBeInTheDocument();
   });
 
-  it('should display the correct title content inside the tooltip', () => {
-    renderWithTheme();
+  it('should render the input number and select for "relative" mode', () => {
+    const customRange = {
+      sinceMode: 'relative',
+      sinceGrainValue: 2,
+      sinceGrain: 'day',
+      untilMode: 'relative',
+      untilGrainValue: 3,
+      untilGrain: 'day',
+    };
 
-    // Check for DATETIME section
-    expect(screen.getByText('DATETIME')).toBeInTheDocument();
-    expect(screen.getByText('Return to specific datetime.')).toBeInTheDocument();
-    expect(screen.getByText('Syntax')).toBeInTheDocument();
-    expect(screen.getByText('Example')).toBeInTheDocument();
+    render(<CustomFrame {...defaultProps} value={customRange} />);
 
-    // Check for dateadd examples
-    expect(screen.getByText(/dateadd\(datetime\("today"\), -13, day\)/)).toBeInTheDocument();
-    expect(screen.getByText(/dateadd\(datetime\("2020-03-01"\), 2, day\)/)).toBeInTheDocument();
+    // Check if InputNumber and Select for relative mode are rendered
+    const inputNumber = screen.getByTestId('inputnumber');
+    fireEvent.change(inputNumber, { target: { value: 2 } });
+    expect(defaultProps.onChange).toHaveBeenCalledWith(
+      expect.stringContaining('"sinceGrainValue":2'),
+    );
 
-    // Check for LASTDAY examples
-    expect(screen.getByText(/lastday\(datetime\("today"\), month\)/)).toBeInTheDocument();
-
-    // Check for HOLIDAY examples
-    expect(screen.getByText(/holiday\("christmas", datetime\("2019"\)\)/)).toBeInTheDocument();
+    const select = screen.getByTestId('select');
+    fireEvent.change(select, { target: { value: 'day' } });
+    expect(defaultProps.onChange).toHaveBeenCalledWith(
+      expect.stringContaining('"sinceGrain":"day"'),
+    );
   });
 
-  it('should apply the correct styles based on the theme', () => {
-    renderWithTheme();
+  it('should handle anchor mode changes', () => {
+    const customRange = {
+      anchorMode: 'now',
+      sinceMode: 'relative',
+      untilMode: 'relative',
+    };
 
-    const tooltip = screen.getByRole('tooltip');
-    expect(tooltip).toHaveClass(expect.stringContaining('ant-tooltip-content'));
+    render(<CustomFrame {...defaultProps} value={customRange} />);
 
-    // Check for max-height and other theme-related styles
-    expect(tooltip).toHaveStyle({
-      minWidth: `${theme.gridUnit * 125}px`,
-      maxHeight: '410px',
-    });
-
-    // Check for typography-related styles inside the tooltip
-    const headers = screen.getAllByText('Syntax');
-    headers.forEach(header => {
-      expect(header).toHaveStyle({
-        fontSize: `${theme.typography.sizes.m}px`,
-        fontWeight: `${theme.typography.weights.bold}`,
-      });
-    });
+    const nowRadio = screen.getByLabelText(t('NOW'));
+    fireEvent.click(nowRadio);
+    expect(defaultProps.onChange).toHaveBeenCalledWith(
+      expect.stringContaining('"anchorMode":"now"'),
+    );
   });
 
-  it('should show the tooltip content when hovering over the component', async () => {
-    const user = userEvent.setup();
-    renderWithTheme();
+  it('should render locale-specific date picker', () => {
+    render(<CustomFrame {...defaultProps} />);
 
-    // Simulate hover to trigger tooltip
-    const tooltipTrigger = screen.getByRole('tooltip');
-    await user.hover(tooltipTrigger);
-
-    // Verify that tooltip content is shown
-    expect(screen.getByText('DATETIME')).toBeInTheDocument();
+    // Verify locale passed to DatePicker
+    expect(screen.getByTestId('datepicker')).toBeInTheDocument();
   });
 });
