@@ -1,43 +1,80 @@
-import moment from 'moment';
-import { dttmToString } from './path-to-your-file';
-import { dttmToMoment } from './path-to-your-dttmToMoment'; // Import the function we rely on
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { AdvancedFrame } from './path-to-your-AdvancedFrame';
+import { SEPARATOR } from 'src/explore/components/controls/DateFilterControl/utils';
 
-// Define a mock value for the MOMENT_FORMAT constant
-const MOMENT_FORMAT = 'YYYY-MM-DDTHH:mm:ss';
-
-jest.mock('./path-to-your-dttmToMoment', () => ({
-  dttmToMoment: jest.fn(),
+// Mock necessary components
+jest.mock('@superset-ui/core', () => ({
+  t: jest.fn(str => str),
+}));
+jest.mock('src/explore/components/controls/DateFilterControl/utils', () => ({
+  SEPARATOR: ' : ',
+}));
+jest.mock('src/components/Input', () => ({
+  Input: ({ value, onChange }: any) => (
+    <input value={value} onChange={e => onChange(e)} />
+  ),
+}));
+jest.mock('@superset-ui/chart-controls', () => ({
+  InfoTooltipWithTrigger: ({ tooltip }: { tooltip: string }) => <span>{tooltip}</span>,
 }));
 
-describe('dttmToString', () => {
-  it('should format "now" according to MOMENT_FORMAT', () => {
-    const mockNow = moment('2023-10-10T10:10:10Z').utc().startOf('second');
-    (dttmToMoment as jest.Mock).mockReturnValue(mockNow);
+describe('AdvancedFrame', () => {
+  const setup = (props: any) => {
+    return render(<AdvancedFrame {...props} />);
+  };
 
-    const result = dttmToString('now');
+  it('should render the component with correct labels and tooltips', () => {
+    setup({ value: '', onChange: jest.fn() });
 
-    expect(result).toBe(mockNow.format(MOMENT_FORMAT));  // Ensure correct formatting of "now"
+    // Check for section title and labels
+    expect(screen.getByText('Configure Advanced Time Range ')).toBeInTheDocument();
+    expect(screen.getByText('START (INCLUSIVE)')).toBeInTheDocument();
+    expect(screen.getByText('END (EXCLUSIVE)')).toBeInTheDocument();
+    expect(screen.getByText('Start date included in time range')).toBeInTheDocument();
+    expect(screen.getByText('End date excluded from time range')).toBeInTheDocument();
   });
 
-  it('should format "today" according to MOMENT_FORMAT', () => {
-    const mockToday = moment('2023-10-10T00:00:00Z').utc().startOf('day');
-    (dttmToMoment as jest.Mock).mockReturnValue(mockToday);
+  it('should initialize with the correct "since" and "until" values', () => {
+    setup({ value: 'Last 7 days : Next 5 days', onChange: jest.fn() });
 
-    const result = dttmToString('today');
-
-    expect(result).toBe(mockToday.format(MOMENT_FORMAT));  // Ensure correct formatting of "today"
+    // Verify the input values
+    const inputs = screen.getAllByRole('textbox');
+    expect(inputs[0]).toHaveValue('Last 7 days'); // "since" input
+    expect(inputs[1]).toHaveValue('Next 5 days'); // "until" input
   });
 
-  it('should format a date string according to MOMENT_FORMAT', () => {
-    const mockDate = moment('2023-10-10T10:10:10Z');
-    (dttmToMoment as jest.Mock).mockReturnValue(mockDate);
+  it('should trigger onChange when "since" value is changed', () => {
+    const onChangeMock = jest.fn();
+    setup({ value: 'Last 7 days : Next 5 days', onChange: onChangeMock });
 
-    const result = dttmToString('2023-10-10T10:10:10Z');
+    const sinceInput = screen.getAllByRole('textbox')[0];
 
-    expect(result).toBe(mockDate.format(MOMENT_FORMAT));  // Ensure correct formatting of date string
+    // Simulate changing the "since" input
+    fireEvent.change(sinceInput, { target: { value: 'Last 10 days' } });
+
+    // Check that onChange was called with the updated value
+    expect(onChangeMock).toHaveBeenCalledWith('Last 10 days : Next 5 days');
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();  // Clear mocks after each test to avoid side effects
+  it('should trigger onChange when "until" value is changed', () => {
+    const onChangeMock = jest.fn();
+    setup({ value: 'Last 7 days : Next 5 days', onChange: onChangeMock });
+
+    const untilInput = screen.getAllByRole('textbox')[1];
+
+    // Simulate changing the "until" input
+    fireEvent.change(untilInput, { target: { value: 'Next 10 days' } });
+
+    // Check that onChange was called with the updated value
+    expect(onChangeMock).toHaveBeenCalledWith('Last 7 days : Next 10 days');
+  });
+
+  it('should handle empty value by initializing "since" and "until" to empty strings', () => {
+    setup({ value: '', onChange: jest.fn() });
+
+    const inputs = screen.getAllByRole('textbox');
+    expect(inputs[0]).toHaveValue(''); // "since" input should be empty
+    expect(inputs[1]).toHaveValue(''); // "until" input should be empty
   });
 });
