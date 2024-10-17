@@ -1,98 +1,107 @@
 import React from 'react';
-import configureStore from 'redux-mock-store';
-import { Provider } from 'react-redux';
-import { render, fireEvent, screen } from '@testing-library/react';
-import AnnotationLayerControl from './AnnotationLayerControl';
-import { runAnnotationQuery } from 'src/components/Chart/chartAction';
+import { render, screen, fireEvent } from '@testing-library/react';
+import ColumnConfigPopover from './ColumnConfigPopover';
+import { GenericDataType } from '@superset-ui/core';
+import { Tabs } from 'src/components';
+import { SHARED_COLUMN_CONFIG_PROPS } from './constants';
 
-jest.mock('src/components/Chart/chartAction', () => ({
-  runAnnotationQuery: jest.fn(),
+// Mock the ControlForm, ControlFormRow, and ControlFormItem
+jest.mock('./ControlForm', () => ({
+  ControlForm: ({ children }) => <div>{children}</div>,
+  ControlFormRow: ({ children }) => <div>{children}</div>,
+  ControlFormItem: ({ name, ...props }) => (
+    <div data-testid={`form-item-${name}`} {...props}>
+      {name}
+    </div>
+  ),
 }));
 
-const mockStore = configureStore([]);
-
-describe('AnnotationLayerControl', () => {
-  let store;
-  const initialState = {
-    charts: {
-      someChartKey: {
-        annotationError: {},
-        annotationQuery: {},
-      },
-    },
-    explore: {
-      controls: {
-        color_scheme: { value: 'some_color_scheme' },
-        viz_type: { value: 'line' },
-      },
-    },
+describe('ColumnConfigPopover', () => {
+  const mockOnChange = jest.fn();
+  const column = {
+    type: GenericDataType.String,
+    config: {},
+  };
+  const configFormLayout = {
+    [GenericDataType.String]: [
+      [{ name: 'column1' }, { name: 'column2' }],
+      [{ name: 'column3' }],
+    ],
   };
 
-  beforeEach(() => {
-    store = mockStore(initialState);
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  it('renders the component', () => {
-    const { container } = render(
-      <Provider store={store}>
-        <AnnotationLayerControl value={[]} onChange={jest.fn()} actions={{}} />
-      </Provider>
-    );
-
-    expect(container).toBeInTheDocument();
-    expect(screen.getByText('Add annotation layer')).toBeInTheDocument();
-  });
-
-  it('opens the popover when Add annotation layer button is clicked', () => {
+  it('renders without crashing', () => {
     render(
-      <Provider store={store}>
-        <AnnotationLayerControl value={[]} onChange={jest.fn()} actions={{}} />
-      </Provider>
+      <ColumnConfigPopover
+        column={column}
+        configFormLayout={configFormLayout}
+        onChange={mockOnChange}
+      />
     );
 
-    const addButton = screen.getByTestId('add-annotation-layer-button');
-    fireEvent.click(addButton);
-
-    expect(screen.getByTestId('popover-content')).toBeInTheDocument();
+    // Ensure that the form items render correctly
+    expect(screen.getByTestId('form-item-column1')).toBeInTheDocument();
+    expect(screen.getByTestId('form-item-column2')).toBeInTheDocument();
+    expect(screen.getByTestId('form-item-column3')).toBeInTheDocument();
   });
 
-  it('calls onChange when adding a new annotation layer', () => {
-    const mockOnChange = jest.fn();
+  it('renders tabs when layout contains tabs', () => {
+    const tabbedConfigFormLayout = {
+      [GenericDataType.String]: [
+        {
+          tab: 'Tab 1',
+          children: [[{ name: 'tabColumn1' }]],
+        },
+        {
+          tab: 'Tab 2',
+          children: [[{ name: 'tabColumn2' }]],
+        },
+      ],
+    };
+
     render(
-      <Provider store={store}>
-        <AnnotationLayerControl value={[]} onChange={mockOnChange} actions={{}} />
-      </Provider>
+      <ColumnConfigPopover
+        column={column}
+        configFormLayout={tabbedConfigFormLayout}
+        onChange={mockOnChange}
+      />
     );
 
-    const addButton = screen.getByTestId('add-annotation-layer-button');
-    fireEvent.click(addButton);
+    // Ensure Tabs are rendered
+    expect(screen.getByText('Tab 1')).toBeInTheDocument();
+    expect(screen.getByText('Tab 2')).toBeInTheDocument();
 
-    // Simulate adding a new annotation
-    const annotation = { name: 'New Annotation', sourceType: 'NATIVE' };
-    const addAnnotationLayer = screen.getByTestId('popover-content');
-
-    // Assume that the component calls onChange with the new annotation array
-    fireEvent.click(addAnnotationLayer);
-
-    expect(mockOnChange).toHaveBeenCalledWith([annotation]);
-  });
-
-  it('dispatches the runAnnotationQuery action when a new annotation is added', () => {
-    const mockOnChange = jest.fn();
-    render(
-      <Provider store={store}>
-        <AnnotationLayerControl value={[]} onChange={mockOnChange} actions={{}} />
-      </Provider>
-    );
-
-    const addButton = screen.getByTestId('add-annotation-layer-button');
-    fireEvent.click(addButton);
-
-    const annotation = { name: 'New Annotation', sourceType: 'NATIVE' };
+    // Ensure form items within tabs are rendered
+    fireEvent.click(screen.getByText('Tab 1'));
+    expect(screen.getByTestId('form-item-tabColumn1')).toBeInTheDocument();
     
-    // Simulate dispatching the query action
-    fireEvent.click(screen.getByTestId('popover-content'));
+    fireEvent.click(screen.getByText('Tab 2'));
+    expect(screen.getByTestId('form-item-tabColumn2')).toBeInTheDocument();
+  });
 
-    expect(runAnnotationQuery).toHaveBeenCalledWith({ annotation, force: true });
+  it('calls onChange when a form item changes', () => {
+    const configFormLayoutWithSharedProps = {
+      [GenericDataType.String]: [
+        [{ name: 'sharedColumn1' }, { name: 'sharedColumn2' }],
+      ],
+    };
+
+    render(
+      <ColumnConfigPopover
+        column={column}
+        configFormLayout={configFormLayoutWithSharedProps}
+        onChange={mockOnChange}
+      />
+    );
+
+    // Simulate a change event on a form item
+    const formItem = screen.getByTestId('form-item-sharedColumn1');
+    fireEvent.change(formItem, { target: { value: 'new value' } });
+
+    // Check if onChange is called with the expected new value
+    expect(mockOnChange).toHaveBeenCalled();
   });
 });
