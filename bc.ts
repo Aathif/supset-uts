@@ -1,83 +1,98 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { DateLabel } from './path-to-your-DateLabel';
-import { ThemeProvider } from '@superset-ui/core'; // Import your theme provider
+import { render, screen } from '@testing-library/react';
+import { ThemeProvider } from '@superset-ui/core';
+import DateFunctionTooltip from './path-to-your-DateFunctionTooltip';
+import userEvent from '@testing-library/user-event';
 
-// Mock necessary components
-jest.mock('src/components/Icons', () => ({
-  CalendarOutlined: ({ iconSize, iconColor }: any) => (
-    <span role="img" style={{ fontSize: iconSize, color: iconColor }}>
-      🗓
-    </span>
+// Mocking Tooltip component
+jest.mock('src/components/Tooltip', () => ({
+  Tooltip: ({ title, overlayClassName, ...props }: any) => (
+    <div role="tooltip" className={overlayClassName} {...props}>
+      {title}
+    </div>
   ),
 }));
 
-describe('DateLabel', () => {
+describe('DateFunctionTooltip', () => {
   const theme = {
     gridUnit: 4,
-    colors: {
-      grayscale: {
-        light1: '#ccc',
-        light2: '#ddd',
-        light5: '#eee',
-        dark1: '#000',
-        base: '#333',
+    typography: {
+      sizes: {
+        s: 12,
+        m: 16,
+      },
+      weights: {
+        bold: 700,
       },
     },
-    borderRadius: 4,
   };
 
-  const setup = (props: any) => {
+  const renderWithTheme = (props = {}) => {
     return render(
       <ThemeProvider theme={theme}>
-        <DateLabel {...props} />
+        <DateFunctionTooltip {...props} />
       </ThemeProvider>,
     );
   };
 
-  it('should render with the correct label and calendar icon', () => {
-    setup({ label: 'Date Label', isActive: false, isPlaceholder: false });
+  it('should render the tooltip correctly', () => {
+    renderWithTheme();
 
-    // Check for the label text
-    expect(screen.getByText('Date Label')).toBeInTheDocument();
-
-    // Check for the calendar icon
-    const calendarIcon = screen.getByRole('img');
-    expect(calendarIcon).toBeInTheDocument();
-    expect(calendarIcon).toHaveStyle({ fontSize: 's', color: theme.colors.grayscale.base });
+    // Verify that the tooltip content is rendered correctly
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
   });
 
-  it('should apply the active border color when "isActive" is true', () => {
-    const { container } = setup({ label: 'Active Label', isActive: true });
+  it('should display the correct title content inside the tooltip', () => {
+    renderWithTheme();
 
-    // Verify the active border color
-    expect(container.firstChild).toHaveStyle(`border-color: ${'#45BED6'}`);
+    // Check for DATETIME section
+    expect(screen.getByText('DATETIME')).toBeInTheDocument();
+    expect(screen.getByText('Return to specific datetime.')).toBeInTheDocument();
+    expect(screen.getByText('Syntax')).toBeInTheDocument();
+    expect(screen.getByText('Example')).toBeInTheDocument();
+
+    // Check for dateadd examples
+    expect(screen.getByText(/dateadd\(datetime\("today"\), -13, day\)/)).toBeInTheDocument();
+    expect(screen.getByText(/dateadd\(datetime\("2020-03-01"\), 2, day\)/)).toBeInTheDocument();
+
+    // Check for LASTDAY examples
+    expect(screen.getByText(/lastday\(datetime\("today"\), month\)/)).toBeInTheDocument();
+
+    // Check for HOLIDAY examples
+    expect(screen.getByText(/holiday\("christmas", datetime\("2019"\)\)/)).toBeInTheDocument();
   });
 
-  it('should render as a placeholder with a lighter text color when "isPlaceholder" is true', () => {
-    const { container } = setup({ label: 'Placeholder Label', isPlaceholder: true });
+  it('should apply the correct styles based on the theme', () => {
+    renderWithTheme();
 
-    // Verify the placeholder text color
-    const labelContent = container.querySelector('.date-label-content');
-    expect(labelContent).toHaveStyle(`color: ${theme.colors.grayscale.light1}`);
+    const tooltip = screen.getByRole('tooltip');
+    expect(tooltip).toHaveClass(expect.stringContaining('ant-tooltip-content'));
+
+    // Check for max-height and other theme-related styles
+    expect(tooltip).toHaveStyle({
+      minWidth: `${theme.gridUnit * 125}px`,
+      maxHeight: '410px',
+    });
+
+    // Check for typography-related styles inside the tooltip
+    const headers = screen.getAllByText('Syntax');
+    headers.forEach(header => {
+      expect(header).toHaveStyle({
+        fontSize: `${theme.typography.sizes.m}px`,
+        fontWeight: `${theme.typography.weights.bold}`,
+      });
+    });
   });
 
-  it('should call the "onClick" handler when clicked', () => {
-    const onClickMock = jest.fn();
-    setup({ label: 'Clickable Label', onClick: onClickMock });
+  it('should show the tooltip content when hovering over the component', async () => {
+    const user = userEvent.setup();
+    renderWithTheme();
 
-    // Simulate a click event
-    fireEvent.click(screen.getByText('Clickable Label'));
+    // Simulate hover to trigger tooltip
+    const tooltipTrigger = screen.getByRole('tooltip');
+    await user.hover(tooltipTrigger);
 
-    // Verify the onClick handler is called
-    expect(onClickMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should render with a translated string when the label is a string', () => {
-    setup({ label: 'Date Label', isActive: false, isPlaceholder: false });
-
-    // Check for the translated label text (assuming t function is mocked)
-    expect(screen.getByText('Date Label')).toBeInTheDocument();
+    // Verify that tooltip content is shown
+    expect(screen.getByText('DATETIME')).toBeInTheDocument();
   });
 });
-
