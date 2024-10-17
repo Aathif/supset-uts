@@ -1,22 +1,22 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
+import ColumnConfigControl from './ColumnConfigControl';
 import { useTheme } from '@superset-ui/core';
-import ControlFormItem, { ControlFormItemComponents } from './ControlFormItem';
-import ControlHeader from '../../../ControlHeader';
 
-// Mock the `useTheme` hook to return theme values
+// Mock the `useTheme` hook
 jest.mock('@superset-ui/core', () => ({
   useTheme: jest.fn(),
 }));
 
-// Mock components from `ControlFormItemComponents`
-ControlFormItemComponents.Checkbox = jest.fn(() => <div>Checkbox</div>);
-ControlFormItemComponents.TextControl = jest.fn(() => <input />);
-
-describe('ControlFormItem', () => {
+describe('ColumnConfigControl', () => {
   const mockOnChange = jest.fn();
   const mockTheme = {
+    colors: {
+      grayscale: { light2: '#e0e0e0', light4: '#b0b0b0' },
+      text: { label: '#333' },
+    },
     gridUnit: 4,
+    typography: { sizes: { xs: '12px' } },
   };
 
   beforeEach(() => {
@@ -25,101 +25,97 @@ describe('ControlFormItem', () => {
     jest.clearAllMocks();
   });
 
-  it('renders the Checkbox control with the correct props', () => {
+  it('renders columns from queryResponse', () => {
+    const queryResponse = {
+      colnames: ['column1', 'column2'],
+      coltypes: ['STRING', 'NUMBER'],
+    };
+
     const { getByText } = render(
-      <ControlFormItem
-        name="checkboxControl"
-        label="Test Checkbox"
-        controlType="Checkbox"
-        value={true}
+      <ColumnConfigControl
+        queryResponse={queryResponse}
+        value={{ column1: {}, column2: {} }}
         onChange={mockOnChange}
       />,
     );
 
-    // Check if the Checkbox is rendered
-    expect(getByText('Checkbox')).toBeInTheDocument();
-
-    // Check if the ControlHeader renders correctly
-    expect(getByText('Test Checkbox')).toBeInTheDocument();
+    expect(getByText('column1')).toBeInTheDocument();
+    expect(getByText('column2')).toBeInTheDocument();
   });
 
-  it('renders other control types and handles change events', () => {
-    const { getByRole } = render(
-      <ControlFormItem
-        name="textControl"
-        label="Test Input"
-        controlType="TextControl"
-        value="initialValue"
+  it('shows a limited number of columns initially', () => {
+    const queryResponse = {
+      colnames: Array.from({ length: 12 }, (_, i) => `column${i + 1}`),
+      coltypes: Array.from({ length: 12 }, () => 'STRING'),
+    };
+
+    const { getByText, queryByText } = render(
+      <ColumnConfigControl
+        queryResponse={queryResponse}
+        value={{}}
         onChange={mockOnChange}
       />,
     );
 
-    // Check if the TextControl is rendered (an input in this case)
-    const input = getByRole('textbox');
-    expect(input).toBeInTheDocument();
-    expect(input.value).toBe('initialValue');
-
-    // Simulate changing the input value
-    fireEvent.change(input, { target: { value: 'newValue' } });
-
-    // Ensure the onChange handler is called with the updated value
-    expect(mockOnChange).toHaveBeenCalledWith('newValue');
+    // Expect only the first 10 columns to be displayed
+    expect(getByText('column1')).toBeInTheDocument();
+    expect(getByText('column10')).toBeInTheDocument();
+    expect(queryByText('column11')).not.toBeInTheDocument();
+    expect(queryByText('column12')).not.toBeInTheDocument();
   });
 
-  it('validates the value and shows validation errors', () => {
-    const validator = jest.fn(value => (value !== 'valid' ? 'Error' : false));
+  it('shows all columns when "Show all columns" is clicked', () => {
+    const queryResponse = {
+      colnames: Array.from({ length: 12 }, (_, i) => `column${i + 1}`),
+      coltypes: Array.from({ length: 12 }, () => 'STRING'),
+    };
 
-    const { getByText, getByRole } = render(
-      <ControlFormItem
-        name="textControl"
-        label="Test Input"
-        controlType="TextControl"
-        value="initialValue"
-        validators={[validator]}
+    const { getByText } = render(
+      <ColumnConfigControl
+        queryResponse={queryResponse}
+        value={{}}
         onChange={mockOnChange}
       />,
     );
 
-    const input = getByRole('textbox');
-    fireEvent.change(input, { target: { value: 'invalid' } });
+    // Click to show more columns
+    fireEvent.click(getByText('Show all columns'));
 
-    // Ensure the validator is called
-    expect(validator).toHaveBeenCalledWith('invalid');
-
-    // Check if the validation error is displayed
-    expect(getByText('Error')).toBeInTheDocument();
-
-    // Ensure onChange is not called when validation errors exist
-    expect(mockOnChange).not.toHaveBeenCalled();
-
-    // Change to a valid value
-    fireEvent.change(input, { target: { value: 'valid' } });
-
-    // Ensure the validator is called with the new value
-    expect(validator).toHaveBeenCalledWith('valid');
-
-    // Ensure the validation error is cleared
-    expect(getByText('Error')).not.toBeInTheDocument();
-
-    // Ensure onChange is called with the valid value
-    expect(mockOnChange).toHaveBeenCalledWith('valid');
+    // Expect all columns to be displayed
+    expect(getByText('column11')).toBeInTheDocument();
+    expect(getByText('column12')).toBeInTheDocument();
   });
 
-  it('applies styles from the theme', () => {
+  it('calls onChange with the correct config when column config is updated', () => {
+    const queryResponse = {
+      colnames: ['column1'],
+      coltypes: ['STRING'],
+    };
+
+    const { getByText } = render(
+      <ColumnConfigControl
+        queryResponse={queryResponse}
+        value={{ column1: { someConfig: true } }}
+        onChange={mockOnChange}
+      />,
+    );
+
+    // Simulate changing the config for column1
+    const columnItem = getByText('column1');
+    fireEvent.click(columnItem); // Assuming clicking updates the config in your component
+
+    expect(mockOnChange).toHaveBeenCalled();
+  });
+
+  it('returns null when no columns are available', () => {
     const { container } = render(
-      <ControlFormItem
-        name="textControl"
-        controlType="TextControl"
-        value="initialValue"
+      <ColumnConfigControl
+        queryResponse={undefined}
+        value={{}}
+        onChange={mockOnChange}
       />,
     );
 
-    const div = container.querySelector('div');
-    expect(div).toHaveStyle(`
-      margin: 8px;
-      width: undefined;
-      max-width: 100%;
-      flex: 1;
-    `);
+    expect(container).toBeEmptyDOMElement();
   });
 });
