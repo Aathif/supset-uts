@@ -1,71 +1,65 @@
-import React from 'react';
-import { shallow } from 'enzyme';
-import { RunQueryButton } from './RunQueryButton';
-import Button from 'src/components/Button';
+import { renderHook, act } from '@testing-library/react-hooks';
+import { useResizeDetectorByObserver } from './useResizeDetectorByObserver';
 
-describe('RunQueryButton', () => {
-  const defaultProps = {
-    loading: false,
-    onQuery: jest.fn(),
-    onStop: jest.fn(),
-    errorMessage: '',
-    isNewChart: false,
-    canStopQuery: true,
-    chartIsStale: false,
-  };
+describe('useResizeDetectorByObserver', () => {
+  it('should return default width and height when no resizing happens', () => {
+    const { result } = renderHook(() => useResizeDetectorByObserver());
 
-  it('renders stop button when loading is true', () => {
-    const wrapper = shallow(<RunQueryButton {...defaultProps} loading />);
-    const stopButton = wrapper.find(Button);
-    expect(stopButton.exists()).toBe(true);
-    expect(stopButton.prop('buttonStyle')).toEqual('warning');
-    expect(stopButton.find('i').hasClass('fa-stop')).toBe(true);
-    expect(stopButton.children().text()).toContain('Stop');
-    stopButton.simulate('click');
-    expect(defaultProps.onStop).toHaveBeenCalled();
+    expect(result.current.width).toBeUndefined();
+    expect(result.current.height).toBeUndefined();
   });
 
-  it('renders run query button when loading is false and isNewChart is true', () => {
-    const wrapper = shallow(
-      <RunQueryButton {...defaultProps} isNewChart />,
-    );
-    const runButton = wrapper.find(Button);
-    expect(runButton.exists()).toBe(true);
-    expect(runButton.prop('buttonStyle')).toEqual('secondary');
-    expect(runButton.text()).toContain('Create chart');
-    runButton.simulate('click');
-    expect(defaultProps.onQuery).toHaveBeenCalled();
+  it('should update width and height when resize happens', () => {
+    // Mock the DOM element and its boundingClientRect method
+    const mockRef = {
+      current: {
+        getBoundingClientRect: jest.fn().mockReturnValue({ width: 100, height: 200 }),
+      },
+    };
+
+    const { result } = renderHook(() => useResizeDetectorByObserver());
+
+    // Mock useRef to use the custom mockRef
+    result.current.ref.current = mockRef.current;
+
+    // Trigger the resize
+    act(() => {
+      result.current.ref.current.getBoundingClientRect();
+      result.current.observerRef.onResize();
+    });
+
+    expect(result.current.width).toBe(100);
+    expect(result.current.height).toBe(200);
   });
 
-  it('renders update chart button when loading is false and isNewChart is false', () => {
-    const wrapper = shallow(<RunQueryButton {...defaultProps} />);
-    const runButton = wrapper.find(Button);
-    expect(runButton.exists()).toBe(true);
-    expect(runButton.prop('buttonStyle')).toEqual('secondary');
-    expect(runButton.text()).toContain('Update chart');
-  });
+  it('should debounce onResize and update the size only after 300ms', () => {
+    jest.useFakeTimers(); // Use Jest's fake timers for debouncing
 
-  it('disables run query button when there is an error message', () => {
-    const wrapper = shallow(
-      <RunQueryButton {...defaultProps} errorMessage="Error" />,
-    );
-    const runButton = wrapper.find(Button);
-    expect(runButton.prop('disabled')).toBe(true);
-  });
+    const mockRef = {
+      current: {
+        getBoundingClientRect: jest.fn().mockReturnValue({ width: 150, height: 250 }),
+      },
+    };
 
-  it('uses primary button style when chart is stale', () => {
-    const wrapper = shallow(
-      <RunQueryButton {...defaultProps} chartIsStale />,
-    );
-    const runButton = wrapper.find(Button);
-    expect(runButton.prop('buttonStyle')).toEqual('primary');
-  });
+    const { result } = renderHook(() => useResizeDetectorByObserver());
 
-  it('uses secondary button style when chart is not stale', () => {
-    const wrapper = shallow(
-      <RunQueryButton {...defaultProps} chartIsStale={false} />,
-    );
-    const runButton = wrapper.find(Button);
-    expect(runButton.prop('buttonStyle')).toEqual('secondary');
+    result.current.ref.current = mockRef.current;
+
+    // Trigger onResize
+    act(() => {
+      result.current.observerRef.onResize();
+      jest.advanceTimersByTime(299); // Advance time by less than debounce period
+    });
+
+    // Ensure the width and height are still not updated before debounce time
+    expect(result.current.width).toBeUndefined();
+    expect(result.current.height).toBeUndefined();
+
+    act(() => {
+      jest.advanceTimersByTime(1); // Advance time by 1ms to pass debounce period
+    });
+
+    expect(result.current.width).toBe(150);
+    expect(result.current.height).toBe(250);
   });
 });
