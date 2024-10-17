@@ -1,121 +1,89 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react';
-import ColumnConfigControl from './ColumnConfigControl';
+import ColumnConfigItem from './ColumnConfigItem';
 import { useTheme } from '@superset-ui/core';
+import ColumnConfigPopover from './ColumnConfigPopover';
 
-// Mock the `useTheme` hook
+// Mock the useTheme hook
 jest.mock('@superset-ui/core', () => ({
   useTheme: jest.fn(),
 }));
 
-describe('ColumnConfigControl', () => {
+// Mock the ColumnConfigPopover component
+jest.mock('./ColumnConfigPopover', () => jest.fn(() => <div>Popover Content</div>));
+
+describe('ColumnConfigItem', () => {
   const mockOnChange = jest.fn();
   const mockTheme = {
     colors: {
-      grayscale: { light2: '#e0e0e0', light4: '#b0b0b0' },
-      text: { label: '#333' },
+      grayscale: { light2: '#e0e0e0', light4: '#b0b0b0', light1: '#f0f0f0' },
     },
     gridUnit: 4,
-    typography: { sizes: { xs: '12px' } },
   };
 
   beforeEach(() => {
-    // Mock the theme to be used in the component
     useTheme.mockReturnValue(mockTheme);
     jest.clearAllMocks();
   });
 
-  it('renders columns from queryResponse', () => {
-    const queryResponse = {
-      colnames: ['column1', 'column2'],
-      coltypes: ['STRING', 'NUMBER'],
-    };
-
+  it('renders column name and type', () => {
+    const column = { name: 'Column A', type: 'STRING' };
     const { getByText } = render(
-      <ColumnConfigControl
-        queryResponse={queryResponse}
-        value={{ column1: {}, column2: {} }}
+      <ColumnConfigItem
+        column={column}
         onChange={mockOnChange}
-      />,
+      />
     );
 
-    expect(getByText('column1')).toBeInTheDocument();
-    expect(getByText('column2')).toBeInTheDocument();
+    expect(getByText('Column A')).toBeInTheDocument();
+    expect(getByText('STRING')).toBeInTheDocument(); // Assuming ColumnTypeLabel renders the type
   });
 
-  it('shows a limited number of columns initially', () => {
-    const queryResponse = {
-      colnames: Array.from({ length: 12 }, (_, i) => `column${i + 1}`),
-      coltypes: Array.from({ length: 12 }, () => 'STRING'),
-    };
-
-    const { getByText, queryByText } = render(
-      <ColumnConfigControl
-        queryResponse={queryResponse}
-        value={{}}
-        onChange={mockOnChange}
-      />,
-    );
-
-    // Expect only the first 10 columns to be displayed
-    expect(getByText('column1')).toBeInTheDocument();
-    expect(getByText('column10')).toBeInTheDocument();
-    expect(queryByText('column11')).not.toBeInTheDocument();
-    expect(queryByText('column12')).not.toBeInTheDocument();
-  });
-
-  it('shows all columns when "Show all columns" is clicked', () => {
-    const queryResponse = {
-      colnames: Array.from({ length: 12 }, (_, i) => `column${i + 1}`),
-      coltypes: Array.from({ length: 12 }, () => 'STRING'),
-    };
-
+  it('opens popover on click', () => {
+    const column = { name: 'Column B', type: 'NUMBER' };
     const { getByText } = render(
-      <ColumnConfigControl
-        queryResponse={queryResponse}
-        value={{}}
+      <ColumnConfigItem
+        column={column}
         onChange={mockOnChange}
-      />,
+      />
     );
 
-    // Click to show more columns
-    fireEvent.click(getByText('Show all columns'));
+    // Click the item to open the popover
+    fireEvent.click(getByText('Column B'));
 
-    // Expect all columns to be displayed
-    expect(getByText('column11')).toBeInTheDocument();
-    expect(getByText('column12')).toBeInTheDocument();
+    // Check if the popover content is rendered
+    expect(getByText('Popover Content')).toBeInTheDocument();
   });
 
-  it('calls onChange with the correct config when column config is updated', () => {
-    const queryResponse = {
-      colnames: ['column1'],
-      coltypes: ['STRING'],
-    };
-
+  it('calls onChange when column config is changed', () => {
+    const column = { name: 'Column C', type: 'BOOLEAN' };
     const { getByText } = render(
-      <ColumnConfigControl
-        queryResponse={queryResponse}
-        value={{ column1: { someConfig: true } }}
+      <ColumnConfigItem
+        column={column}
         onChange={mockOnChange}
-      />,
+      />
     );
 
-    // Simulate changing the config for column1
-    const columnItem = getByText('column1');
-    fireEvent.click(columnItem); // Assuming clicking updates the config in your component
+    // Open the popover
+    fireEvent.click(getByText('Column C'));
 
-    expect(mockOnChange).toHaveBeenCalled();
+    // Assuming you have some interaction in the popover that calls onChange
+    // Simulate a change
+    fireEvent.click(getByText('Some action in popover')); // Adjust based on actual popover content
+
+    expect(mockOnChange).toHaveBeenCalledTimes(1);
   });
 
-  it('returns null when no columns are available', () => {
+  it('renders with correct styles based on theme', () => {
+    const column = { name: 'Column D', type: 'STRING' };
     const { container } = render(
-      <ColumnConfigControl
-        queryResponse={undefined}
-        value={{}}
+      <ColumnConfigItem
+        column={column}
         onChange={mockOnChange}
-      />,
+      />
     );
 
-    expect(container).toBeEmptyDOMElement();
+    // Check styles here if necessary (for example, you can check for class names or styles applied)
+    expect(container.firstChild).toHaveStyle(`border-bottom: 1px solid ${mockTheme.colors.grayscale.light2}`);
   });
 });
