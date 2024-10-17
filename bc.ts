@@ -1,102 +1,33 @@
-import { fetchTimeRange } from './path-to-your-file';  // adjust the import as necessary
-import { SupersetClient } from '@superset-ui/core';
-import rison from 'rison';
-import { buildTimeRangeString, formatTimeRange, getClientErrorObject } from './path-to-your-utils';  // adjust imports as necessary
+import moment, { Moment } from 'moment';
+import { dttmToMoment } from './path-to-your-file';
 
-jest.mock('@superset-ui/core', () => ({
-  SupersetClient: {
-    get: jest.fn(),
-  },
-}));
+describe('dttmToMoment', () => {
+  it('should return the current moment at the start of the second when dttm is "now"', () => {
+    const mockNow = moment('2023-10-10T10:10:10Z').utc().startOf('second');
+    jest.spyOn(moment.prototype, 'startOf').mockReturnThis();  // Mock startOf to return the mock moment
 
-jest.mock('rison', () => ({
-  encode_uri: jest.fn(),
-}));
+    const result = dttmToMoment('now');
 
-jest.mock('./path-to-your-utils', () => ({
-  buildTimeRangeString: jest.fn(),
-  formatTimeRange: jest.fn(),
-  getClientErrorObject: jest.fn(),
-}));
-
-describe('fetchTimeRange', () => {
-  const mockTimeRange = 'last_week';
-  const mockColumnPlaceholder = 'my_col';
-  const mockEncodedQuery = 'encoded_time_range';
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    rison.encode_uri.mockReturnValue(mockEncodedQuery);
+    expect(result.isSame(mockNow, 'second')).toBe(true);  // Ensure it returns a moment object set to start of second
   });
 
-  it('should return formatted time range value on successful API call', async () => {
-    const mockApiResponse = {
-      json: {
-        result: {
-          since: '2023-01-01',
-          until: '2023-01-07',
-        },
-      },
-    };
-    const mockTimeRangeString = '2023-01-01 - 2023-01-07';
-    SupersetClient.get.mockResolvedValue(mockApiResponse);
-    buildTimeRangeString.mockReturnValue(mockTimeRangeString);
-    formatTimeRange.mockReturnValue('Formatted Time Range');
+  it('should return the current day starting at midnight when dttm is "today"', () => {
+    const mockToday = moment('2023-10-10T00:00:00Z').utc().startOf('day');
+    jest.spyOn(moment.prototype, 'startOf').mockReturnThis();  // Mock startOf to return the mock day start
 
-    const result = await fetchTimeRange(mockTimeRange, mockColumnPlaceholder);
+    const result = dttmToMoment('today');
 
-    expect(rison.encode_uri).toHaveBeenCalledWith(mockTimeRange);
-    expect(SupersetClient.get).toHaveBeenCalledWith({
-      endpoint: `/api/v1/time_range/?q=${mockEncodedQuery}`,
-    });
-    expect(buildTimeRangeString).toHaveBeenCalledWith(
-      mockApiResponse.json.result.since,
-      mockApiResponse.json.result.until,
-    );
-    expect(formatTimeRange).toHaveBeenCalledWith(
-      mockTimeRangeString,
-      mockColumnPlaceholder,
-    );
-    expect(result).toEqual({ value: 'Formatted Time Range' });
+    expect(result.isSame(mockToday, 'day')).toBe(true);  // Ensure it returns moment object set to start of day
   });
 
-  it('should return error message on API failure', async () => {
-    const mockErrorResponse = {
-      statusText: 'Internal Server Error',
-    };
-    const mockClientError = {
-      message: 'Error fetching time range',
-    };
-    SupersetClient.get.mockRejectedValue(mockErrorResponse);
-    getClientErrorObject.mockResolvedValue(mockClientError);
+  it('should return a moment object based on the given date string', () => {
+    const dttm = '2023-10-10T10:10:10Z';
+    const result = dttmToMoment(dttm);
 
-    const result = await fetchTimeRange(mockTimeRange, mockColumnPlaceholder);
-
-    expect(SupersetClient.get).toHaveBeenCalledWith({
-      endpoint: `/api/v1/time_range/?q=${mockEncodedQuery}`,
-    });
-    expect(getClientErrorObject).toHaveBeenCalledWith(mockErrorResponse);
-    expect(result).toEqual({
-      error: mockClientError.message,
-    });
+    expect(result.isSame(moment(dttm))).toBe(true);  // Ensure it returns the correct moment object
   });
 
-  it('should handle missing since and until in response', async () => {
-    const mockApiResponse = {
-      json: {
-        result: {
-          since: '',
-          until: '',
-        },
-      },
-    };
-    SupersetClient.get.mockResolvedValue(mockApiResponse);
-    buildTimeRangeString.mockReturnValue('');
-    formatTimeRange.mockReturnValue('Formatted Time Range');
-
-    const result = await fetchTimeRange(mockTimeRange, mockColumnPlaceholder);
-
-    expect(buildTimeRangeString).toHaveBeenCalledWith('', '');
-    expect(result).toEqual({ value: 'Formatted Time Range' });
+  afterEach(() => {
+    jest.clearAllMocks();  // Clear mocks after each test to avoid side effects
   });
 });
