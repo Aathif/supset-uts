@@ -1,45 +1,71 @@
 import React from 'react';
 import { shallow } from 'enzyme';
-import RowCountLabel from './RowCountLabel';
-import Label from 'src/components/Label';
-import { Tooltip } from 'src/components/Tooltip';
-import { getNumberFormatter } from '@superset-ui/core';
+import { RunQueryButton } from './RunQueryButton';
+import Button from 'src/components/Button';
 
-// Mock getNumberFormatter
-jest.mock('@superset-ui/core', () => ({
-  getNumberFormatter: jest.fn().mockReturnValue(() => (value) => String(value)),
-  t: jest.fn((str) => str),
-  tn: jest.fn((single, plural, count) => (count === 1 ? single : plural)),
-}));
+describe('RunQueryButton', () => {
+  const defaultProps = {
+    loading: false,
+    onQuery: jest.fn(),
+    onStop: jest.fn(),
+    errorMessage: '',
+    isNewChart: false,
+    canStopQuery: true,
+    chartIsStale: false,
+  };
 
-describe('RowCountLabel', () => {
-  it('renders loading state', () => {
-    const wrapper = shallow(<RowCountLabel loading />);
-    expect(wrapper.find(Label).dive().text()).toEqual('Loading...');
+  it('renders stop button when loading is true', () => {
+    const wrapper = shallow(<RunQueryButton {...defaultProps} loading />);
+    const stopButton = wrapper.find(Button);
+    expect(stopButton.exists()).toBe(true);
+    expect(stopButton.prop('buttonStyle')).toEqual('warning');
+    expect(stopButton.find('i').hasClass('fa-stop')).toBe(true);
+    expect(stopButton.children().text()).toContain('Stop');
+    stopButton.simulate('click');
+    expect(defaultProps.onStop).toHaveBeenCalled();
   });
 
-  it('renders danger label when rowcount exceeds limit', () => {
-    const wrapper = shallow(<RowCountLabel rowcount={100} limit={50} />);
-    expect(wrapper.find(Label).prop('type')).toEqual('danger');
-    expect(wrapper.find(Tooltip).exists()).toBe(true); // Tooltip is shown
-  });
-
-  it('renders default label when within limit', () => {
-    const wrapper = shallow(<RowCountLabel rowcount={10} limit={50} />);
-    expect(wrapper.find(Label).prop('type')).toEqual('default');
-    expect(wrapper.find(Tooltip).exists()).toBe(false); // No Tooltip
-  });
-
-  it('renders correct formatted row count', () => {
-    getNumberFormatter.mockReturnValue(() => (value) => `formatted(${value})`);
-    const wrapper = shallow(<RowCountLabel rowcount={100} />);
-    expect(wrapper.find('[data-test="row-count-label"]').text()).toContain(
-      'formatted(100)',
+  it('renders run query button when loading is false and isNewChart is true', () => {
+    const wrapper = shallow(
+      <RunQueryButton {...defaultProps} isNewChart />,
     );
+    const runButton = wrapper.find(Button);
+    expect(runButton.exists()).toBe(true);
+    expect(runButton.prop('buttonStyle')).toEqual('secondary');
+    expect(runButton.text()).toContain('Create chart');
+    runButton.simulate('click');
+    expect(defaultProps.onQuery).toHaveBeenCalled();
   });
 
-  it('shows tooltip when rowcount equals limit', () => {
-    const wrapper = shallow(<RowCountLabel rowcount={50} limit={50} />);
-    expect(wrapper.find(Tooltip).exists()).toBe(true);
+  it('renders update chart button when loading is false and isNewChart is false', () => {
+    const wrapper = shallow(<RunQueryButton {...defaultProps} />);
+    const runButton = wrapper.find(Button);
+    expect(runButton.exists()).toBe(true);
+    expect(runButton.prop('buttonStyle')).toEqual('secondary');
+    expect(runButton.text()).toContain('Update chart');
+  });
+
+  it('disables run query button when there is an error message', () => {
+    const wrapper = shallow(
+      <RunQueryButton {...defaultProps} errorMessage="Error" />,
+    );
+    const runButton = wrapper.find(Button);
+    expect(runButton.prop('disabled')).toBe(true);
+  });
+
+  it('uses primary button style when chart is stale', () => {
+    const wrapper = shallow(
+      <RunQueryButton {...defaultProps} chartIsStale />,
+    );
+    const runButton = wrapper.find(Button);
+    expect(runButton.prop('buttonStyle')).toEqual('primary');
+  });
+
+  it('uses secondary button style when chart is not stale', () => {
+    const wrapper = shallow(
+      <RunQueryButton {...defaultProps} chartIsStale={false} />,
+    );
+    const runButton = wrapper.find(Button);
+    expect(runButton.prop('buttonStyle')).toEqual('secondary');
   });
 });
