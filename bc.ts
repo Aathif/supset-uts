@@ -1,80 +1,83 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { AdvancedFrame } from './path-to-your-AdvancedFrame';
-import { SEPARATOR } from 'src/explore/components/controls/DateFilterControl/utils';
+import { DateLabel } from './path-to-your-DateLabel';
+import { ThemeProvider } from '@superset-ui/core'; // Import your theme provider
 
 // Mock necessary components
-jest.mock('@superset-ui/core', () => ({
-  t: jest.fn(str => str),
-}));
-jest.mock('src/explore/components/controls/DateFilterControl/utils', () => ({
-  SEPARATOR: ' : ',
-}));
-jest.mock('src/components/Input', () => ({
-  Input: ({ value, onChange }: any) => (
-    <input value={value} onChange={e => onChange(e)} />
+jest.mock('src/components/Icons', () => ({
+  CalendarOutlined: ({ iconSize, iconColor }: any) => (
+    <span role="img" style={{ fontSize: iconSize, color: iconColor }}>
+      🗓
+    </span>
   ),
 }));
-jest.mock('@superset-ui/chart-controls', () => ({
-  InfoTooltipWithTrigger: ({ tooltip }: { tooltip: string }) => <span>{tooltip}</span>,
-}));
 
-describe('AdvancedFrame', () => {
-  const setup = (props: any) => {
-    return render(<AdvancedFrame {...props} />);
+describe('DateLabel', () => {
+  const theme = {
+    gridUnit: 4,
+    colors: {
+      grayscale: {
+        light1: '#ccc',
+        light2: '#ddd',
+        light5: '#eee',
+        dark1: '#000',
+        base: '#333',
+      },
+    },
+    borderRadius: 4,
   };
 
-  it('should render the component with correct labels and tooltips', () => {
-    setup({ value: '', onChange: jest.fn() });
+  const setup = (props: any) => {
+    return render(
+      <ThemeProvider theme={theme}>
+        <DateLabel {...props} />
+      </ThemeProvider>,
+    );
+  };
 
-    // Check for section title and labels
-    expect(screen.getByText('Configure Advanced Time Range ')).toBeInTheDocument();
-    expect(screen.getByText('START (INCLUSIVE)')).toBeInTheDocument();
-    expect(screen.getByText('END (EXCLUSIVE)')).toBeInTheDocument();
-    expect(screen.getByText('Start date included in time range')).toBeInTheDocument();
-    expect(screen.getByText('End date excluded from time range')).toBeInTheDocument();
+  it('should render with the correct label and calendar icon', () => {
+    setup({ label: 'Date Label', isActive: false, isPlaceholder: false });
+
+    // Check for the label text
+    expect(screen.getByText('Date Label')).toBeInTheDocument();
+
+    // Check for the calendar icon
+    const calendarIcon = screen.getByRole('img');
+    expect(calendarIcon).toBeInTheDocument();
+    expect(calendarIcon).toHaveStyle({ fontSize: 's', color: theme.colors.grayscale.base });
   });
 
-  it('should initialize with the correct "since" and "until" values', () => {
-    setup({ value: 'Last 7 days : Next 5 days', onChange: jest.fn() });
+  it('should apply the active border color when "isActive" is true', () => {
+    const { container } = setup({ label: 'Active Label', isActive: true });
 
-    // Verify the input values
-    const inputs = screen.getAllByRole('textbox');
-    expect(inputs[0]).toHaveValue('Last 7 days'); // "since" input
-    expect(inputs[1]).toHaveValue('Next 5 days'); // "until" input
+    // Verify the active border color
+    expect(container.firstChild).toHaveStyle(`border-color: ${'#45BED6'}`);
   });
 
-  it('should trigger onChange when "since" value is changed', () => {
-    const onChangeMock = jest.fn();
-    setup({ value: 'Last 7 days : Next 5 days', onChange: onChangeMock });
+  it('should render as a placeholder with a lighter text color when "isPlaceholder" is true', () => {
+    const { container } = setup({ label: 'Placeholder Label', isPlaceholder: true });
 
-    const sinceInput = screen.getAllByRole('textbox')[0];
-
-    // Simulate changing the "since" input
-    fireEvent.change(sinceInput, { target: { value: 'Last 10 days' } });
-
-    // Check that onChange was called with the updated value
-    expect(onChangeMock).toHaveBeenCalledWith('Last 10 days : Next 5 days');
+    // Verify the placeholder text color
+    const labelContent = container.querySelector('.date-label-content');
+    expect(labelContent).toHaveStyle(`color: ${theme.colors.grayscale.light1}`);
   });
 
-  it('should trigger onChange when "until" value is changed', () => {
-    const onChangeMock = jest.fn();
-    setup({ value: 'Last 7 days : Next 5 days', onChange: onChangeMock });
+  it('should call the "onClick" handler when clicked', () => {
+    const onClickMock = jest.fn();
+    setup({ label: 'Clickable Label', onClick: onClickMock });
 
-    const untilInput = screen.getAllByRole('textbox')[1];
+    // Simulate a click event
+    fireEvent.click(screen.getByText('Clickable Label'));
 
-    // Simulate changing the "until" input
-    fireEvent.change(untilInput, { target: { value: 'Next 10 days' } });
-
-    // Check that onChange was called with the updated value
-    expect(onChangeMock).toHaveBeenCalledWith('Last 7 days : Next 10 days');
+    // Verify the onClick handler is called
+    expect(onClickMock).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle empty value by initializing "since" and "until" to empty strings', () => {
-    setup({ value: '', onChange: jest.fn() });
+  it('should render with a translated string when the label is a string', () => {
+    setup({ label: 'Date Label', isActive: false, isPlaceholder: false });
 
-    const inputs = screen.getAllByRole('textbox');
-    expect(inputs[0]).toHaveValue(''); // "since" input should be empty
-    expect(inputs[1]).toHaveValue(''); // "until" input should be empty
+    // Check for the translated label text (assuming t function is mocked)
+    expect(screen.getByText('Date Label')).toBeInTheDocument();
   });
 });
+
