@@ -1,63 +1,38 @@
-import { safeStringify } from './safeStringify';
+import { getURIDirectory } from './getURIDirectory';
 
-describe('safeStringify', () => {
-  test('should stringify a normal JSON object', () => {
-    const obj = { a: 1, b: 'test', c: true };
-    const result = safeStringify(obj);
-    expect(result).toBe(JSON.stringify(obj));
+describe('getURIDirectory', () => {
+  test('should return /explore/ for the default (base) endpoint type', () => {
+    const result = getURIDirectory();
+    expect(result).toBe('/explore/');
   });
 
-  test('should handle null values correctly', () => {
-    const obj = { a: null };
-    const result = safeStringify(obj);
-    expect(result).toBe(JSON.stringify(obj));
+  test('should return /explore/ for unrecognized endpoint types', () => {
+    const result = getURIDirectory('unknownType');
+    expect(result).toBe('/explore/');
   });
 
-  test('should handle empty objects', () => {
-    const obj = {};
-    const result = safeStringify(obj);
-    expect(result).toBe(JSON.stringify(obj));
+  test('should return /superset/explore_json/ for json endpoint type', () => {
+    const result = getURIDirectory('json');
+    expect(result).toBe('/superset/explore_json/');
   });
 
-  test('should omit circular references', () => {
-    const obj: any = { a: 1 };
-    obj.b = obj; // Circular reference
-    const result = safeStringify(obj);
-    expect(result).toBe(JSON.stringify({ a: 1 }));
+  test('should return /superset/explore_json/ for csv endpoint type', () => {
+    const result = getURIDirectory('csv');
+    expect(result).toBe('/superset/explore_json/');
   });
 
-  test('should handle deep nested circular references', () => {
-    const obj: any = { a: { b: { c: {} } } };
-    obj.a.b.c = obj.a; // Circular reference deep inside the object
-    const result = safeStringify(obj);
-    expect(result).toBe(JSON.stringify({ a: { b: { c: {} } } }));
+  test('should return /superset/explore_json/ for query endpoint type', () => {
+    const result = getURIDirectory('query');
+    expect(result).toBe('/superset/explore_json/');
   });
 
-  test('should stringify arrays with circular references omitted', () => {
-    const arr: any = [1, 2];
-    arr.push(arr); // Circular reference
-    const result = safeStringify(arr);
-    expect(result).toBe(JSON.stringify([1, 2]));
+  test('should return /superset/explore_json/ for results endpoint type', () => {
+    const result = getURIDirectory('results');
+    expect(result).toBe('/superset/explore_json/');
   });
 
-  test('should handle deep copies of repeated objects', () => {
-    const obj = { a: 1 };
-    const obj2 = { b: obj, c: obj }; // Repeated but not circular
-    const result = safeStringify(obj2);
-    expect(result).toBe(JSON.stringify(obj2)); // Should stringify normally as there's no circular ref
-  });
-
-  test('should handle non-object types like string or number', () => {
-    const str = "test string";
-    const num = 123;
-    expect(safeStringify(str)).toBe(JSON.stringify(str));
-    expect(safeStringify(num)).toBe(JSON.stringify(num));
-  });
-
-  test('should return undefined when unable to parse value in case of deep copy failure', () => {
-    const obj: any = { a: {} };
-    obj.a.self = obj.a; // Self-referential circular object
-    const result = safeStringify(obj);
-    expect(result).toBe(JSON.stringify({ a: {} }));
+  test('should return /superset/explore_json/ for samples endpoint type', () => {
+    const result = getURIDirectory('samples');
+    expect(result).toBe('/superset/explore_json/');
   });
 });
