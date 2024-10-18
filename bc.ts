@@ -1,98 +1,101 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ThemeProvider } from '@superset-ui/core';
 import supersetTheme from 'src/style/supersetTheme';
-import AlertStatusIcon from './AlertStatusIcon';
-import { AlertState } from '../types';
-import Icons from 'src/components/Icons';
+import { AlertReportCronScheduler } from './AlertReportCronScheduler';
 
 const renderWithTheme = (ui: React.ReactElement) => {
   return render(<ThemeProvider theme={supersetTheme}>{ui}</ThemeProvider>);
 };
 
-describe('AlertStatusIcon component', () => {
-  test('renders "Report sent" when state is Success and report is enabled', () => {
+describe('AlertReportCronScheduler component', () => {
+  const mockOnChange = jest.fn();
+
+  beforeEach(() => {
+    mockOnChange.mockClear();
+  });
+
+  test('renders recurring schedule picker by default', () => {
     renderWithTheme(
-      <AlertStatusIcon state={AlertState.Success} isReportEnabled={true} />
+      <AlertReportCronScheduler value="0 0 * * *" onChange={mockOnChange} />,
     );
 
-    const tooltip = screen.getByText('Report sent');
-    expect(tooltip).toBeInTheDocument();
-    const checkIcon = screen.getByTestId('icon-check'); // Assuming Icons.Check has a data-testid
-    expect(checkIcon).toBeInTheDocument();
+    // Verify that the schedule type select is rendered
+    const scheduleTypeSelect = screen.getByLabelText('Schedule type');
+    expect(scheduleTypeSelect).toBeInTheDocument();
+
+    // Verify that the CronPicker is rendered (since "Picker" is the default type)
+    expect(screen.getByText('Minute')).toBeInTheDocument(); // A CronPicker label
   });
 
-  test('renders "Alert triggered, notification sent" when state is Success and report is not enabled', () => {
+  test('switches to CRON input on schedule type change', () => {
     renderWithTheme(
-      <AlertStatusIcon state={AlertState.Success} isReportEnabled={false} />
+      <AlertReportCronScheduler value="0 0 * * *" onChange={mockOnChange} />,
     );
 
-    const tooltip = screen.getByText('Alert triggered, notification sent');
-    expect(tooltip).toBeInTheDocument();
-    const alertIcon = screen.getByTestId('icon-alert-solid-small'); // Assuming Icons.AlertSolidSmall has a data-testid
-    expect(alertIcon).toBeInTheDocument();
+    // Change the schedule type to 'CRON Schedule'
+    fireEvent.change(screen.getByLabelText('Schedule type'), {
+      target: { value: 'input' }, // Simulate selecting CRON schedule
+    });
+
+    // Verify that the CRON input field is now rendered
+    const cronInput = screen.getByPlaceholderText('CRON expression');
+    expect(cronInput).toBeInTheDocument();
   });
 
-  test('renders "Report sending" when state is Working and report is enabled', () => {
+  test('calls onChange when a valid CRON expression is entered', () => {
     renderWithTheme(
-      <AlertStatusIcon state={AlertState.Working} isReportEnabled={true} />
+      <AlertReportCronScheduler value="" onChange={mockOnChange} />,
     );
 
-    const tooltip = screen.getByText('Report sending');
-    expect(tooltip).toBeInTheDocument();
-    const runningIcon = screen.getByTestId('icon-running'); // Assuming Icons.Running has a data-testid
-    expect(runningIcon).toBeInTheDocument();
+    // Switch to CRON schedule input
+    fireEvent.change(screen.getByLabelText('Schedule type'), {
+      target: { value: 'input' },
+    });
+
+    // Enter a valid CRON expression
+    const cronInput = screen.getByPlaceholderText('CRON expression');
+    fireEvent.change(cronInput, { target: { value: '0 0 * * *' } });
+    fireEvent.blur(cronInput); // Simulate blur event
+
+    // Ensure the onChange callback is called with the correct value
+    expect(mockOnChange).toHaveBeenCalledWith('0 0 * * *');
   });
 
-  test('renders "Alert running" when state is Working and report is not enabled', () => {
+  test('displays validation error when invalid CRON expression is entered', () => {
     renderWithTheme(
-      <AlertStatusIcon state={AlertState.Working} isReportEnabled={false} />
+      <AlertReportCronScheduler value="" onChange={mockOnChange} />,
     );
 
-    const tooltip = screen.getByText('Alert running');
-    expect(tooltip).toBeInTheDocument();
-    const runningIcon = screen.getByTestId('icon-running'); // Assuming Icons.Running has a data-testid
-    expect(runningIcon).toBeInTheDocument();
+    // Switch to CRON schedule input
+    fireEvent.change(screen.getByLabelText('Schedule type'), {
+      target: { value: 'input' },
+    });
+
+    // Enter an invalid CRON expression
+    const cronInput = screen.getByPlaceholderText('CRON expression');
+    fireEvent.change(cronInput, { target: { value: 'invalid cron' } });
+    fireEvent.blur(cronInput); // Simulate blur event
+
+    // Verify that the error border color is applied to the input
+    expect(cronInput).toHaveStyle({ borderColor: supersetTheme.colors.error.base });
+
+    // Ensure onChange is not called with invalid input
+    expect(mockOnChange).not.toHaveBeenCalled();
   });
 
-  test('renders "Report failed" when state is Error and report is enabled', () => {
+  test('calls onChange with recurring schedule from picker', () => {
     renderWithTheme(
-      <AlertStatusIcon state={AlertState.Error} isReportEnabled={true} />
+      <AlertReportCronScheduler value="0 0 * * *" onChange={mockOnChange} />,
     );
 
-    const tooltip = screen.getByText('Report failed');
-    expect(tooltip).toBeInTheDocument();
-    const errorIcon = screen.getByTestId('icon-x-small'); // Assuming Icons.XSmall has a data-testid
-    expect(errorIcon).toBeInTheDocument();
-  });
+    // CronPicker is shown by default, enter a new value
+    fireEvent.change(screen.getByLabelText('Minute'), {
+      target: { value: '15' }, // Simulate selecting a different minute value
+    });
 
-  test('renders "Alert failed" when state is Error and report is not enabled', () => {
-    renderWithTheme(
-      <AlertStatusIcon state={AlertState.Error} isReportEnabled={false} />
-    );
-
-    const tooltip = screen.getByText('Alert failed');
-    expect(tooltip).toBeInTheDocument();
-    const errorIcon = screen.getByTestId('icon-x-small'); // Assuming Icons.XSmall has a data-testid
-    expect(errorIcon).toBeInTheDocument();
-  });
-
-  test('renders "Nothing triggered" when state is Noop', () => {
-    renderWithTheme(<AlertStatusIcon state={AlertState.Noop} isReportEnabled={false} />);
-
-    const tooltip = screen.getByText('Nothing triggered');
-    expect(tooltip).toBeInTheDocument();
-    const checkIcon = screen.getByTestId('icon-check'); // Assuming Icons.Check has a data-testid
-    expect(checkIcon).toBeInTheDocument();
-  });
-
-  test('renders "Alert Triggered, In Grace Period" when state is Grace', () => {
-    renderWithTheme(<AlertStatusIcon state={AlertState.Grace} isReportEnabled={false} />);
-
-    const tooltip = screen.getByText('Alert Triggered, In Grace Period');
-    expect(tooltip).toBeInTheDocument();
-    const alertIcon = screen.getByTestId('icon-alert-solid-small'); // Assuming Icons.AlertSolidSmall has a data-testid
-    expect(alertIcon).toBeInTheDocument();
+    // Ensure onChange is called with updated value
+    expect(mockOnChange).toHaveBeenCalledWith('15 0 * * *');
   });
 });
