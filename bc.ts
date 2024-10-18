@@ -1,49 +1,111 @@
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, fireEvent, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import RecipientIcon from './RecipientIcon';
-import { Tooltip } from 'src/components/Tooltip';
-import Icons from 'src/components/Icons';
-import { RecipientIconName } from '../types';
+import { NotificationMethod } from './NotificationMethod';
+import { NotificationSetting } from '../types';
+import { ThemeProvider } from '@superset-ui/core';
+import supersetTheme from 'src/style/supersetTheme';
 
-// Mock the Tooltip and Icons to ensure rendering works correctly
-jest.mock('src/components/Tooltip', () => ({ children, title }) => (
-  <div>
-    <span>{title}</span>
-    {children}
-  </div>
-));
+const mockUpdate = jest.fn();
+const mockRemove = jest.fn();
 
-jest.mock('src/components/Icons', () => ({
-  Email: () => <span>Email Icon</span>,
-  Slack: () => <span>Slack Icon</span>,
-}));
+const notificationSetting: NotificationSetting = {
+  method: 'Email',
+  recipients: 'example@domain.com',
+  options: ['Email', 'Slack'],
+};
 
-describe('RecipientIcon', () => {
-  test('renders Email icon with tooltip', () => {
-    const { getByText } = render(<RecipientIcon type={RecipientIconName.Email} />);
+const renderWithTheme = (ui: React.ReactElement) => {
+  return render(<ThemeProvider theme={supersetTheme}>{ui}</ThemeProvider>);
+};
 
-    // Check if the email icon is rendered
-    expect(getByText('Email Icon')).toBeInTheDocument();
-
-    // Check if the tooltip for the email icon is correct
-    expect(getByText(RecipientIconName.Email)).toBeInTheDocument();
+describe('NotificationMethod component', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
-  test('renders Slack icon with tooltip', () => {
-    const { getByText } = render(<RecipientIcon type={RecipientIconName.Slack} />);
+  test('renders NotificationMethod correctly', () => {
+    renderWithTheme(
+      <NotificationMethod
+        setting={notificationSetting}
+        index={0}
+        onUpdate={mockUpdate}
+        onRemove={mockRemove}
+      />
+    );
 
-    // Check if the Slack icon is rendered
-    expect(getByText('Slack Icon')).toBeInTheDocument();
-
-    // Check if the tooltip for the Slack icon is correct
-    expect(getByText(RecipientIconName.Slack)).toBeInTheDocument();
+    expect(screen.getByText('Notification Method')).toBeInTheDocument();
+    expect(screen.getByText('Email recipients')).toBeInTheDocument();
+    expect(screen.getByTestId('recipients')).toHaveValue(
+      'example@domain.com',
+    );
   });
 
-  test('renders nothing for unsupported icon type', () => {
-    const { container } = render(<RecipientIcon type="unsupported" />);
+  test('calls onUpdate when method is changed', () => {
+    renderWithTheme(
+      <NotificationMethod
+        setting={notificationSetting}
+        index={0}
+        onUpdate={mockUpdate}
+        onRemove={mockRemove}
+      />
+    );
 
-    // Check if the component renders null for unsupported types
-    expect(container.firstChild).toBeNull();
+    const selectMethod = screen.getByPlaceholderText('Select Delivery Method');
+    fireEvent.change(selectMethod, { target: { value: 'Slack' } });
+
+    expect(mockUpdate).toHaveBeenCalledWith(0, {
+      ...notificationSetting,
+      method: 'Slack',
+      recipients: '',
+    });
+  });
+
+  test('calls onUpdate when recipients are changed', () => {
+    renderWithTheme(
+      <NotificationMethod
+        setting={notificationSetting}
+        index={0}
+        onUpdate={mockUpdate}
+        onRemove={mockRemove}
+      />
+    );
+
+    const recipientInput = screen.getByTestId('recipients');
+    fireEvent.change(recipientInput, { target: { value: 'test@domain.com' } });
+
+    expect(mockUpdate).toHaveBeenCalledWith(0, {
+      ...notificationSetting,
+      recipients: 'test@domain.com',
+    });
+  });
+
+  test('calls onRemove when remove button is clicked', () => {
+    renderWithTheme(
+      <NotificationMethod
+        setting={notificationSetting}
+        index={1}
+        onUpdate={mockUpdate}
+        onRemove={mockRemove}
+      />
+    );
+
+    const deleteButton = screen.getByRole('button');
+    fireEvent.click(deleteButton);
+
+    expect(mockRemove).toHaveBeenCalledWith(1);
+  });
+
+  test('does not render delete button for the first index', () => {
+    renderWithTheme(
+      <NotificationMethod
+        setting={notificationSetting}
+        index={0}
+        onUpdate={mockUpdate}
+        onRemove={mockRemove}
+      />
+    );
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });
