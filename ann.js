@@ -1,84 +1,46 @@
-import { transformFormulaAnnotation } from './yourFile';
-import { evalFormula } from '../utils/annotation';
-import { parseAnnotationOpacity } from '../utils/annotation';
+import { getTooltipFormatter } from './yourFile';
+import { smartDateFormatter, smartDateDetailedFormatter, getTimeFormatter } from '@superset-ui/core';
 
-jest.mock('../utils/annotation', () => ({
-  evalFormula: jest.fn(),
-  parseAnnotationOpacity: jest.fn(),
+jest.mock('@superset-ui/core', () => ({
+  smartDateFormatter: { id: 'smart_date' },
+  smartDateDetailedFormatter: jest.fn(),
+  getTimeFormatter: jest.fn(),
 }));
 
-describe('transformFormulaAnnotation', () => {
-  const mockLayer = {
-    name: 'mock_name',
-    color: 'blue',
-    opacity: 0.5,
-    width: 2,
-    style: 'solid',
-  };
-
-  const mockData = [/* mock data here */];
-  const mockSupersetColor = '#ff0000';
-  
+describe('getTooltipFormatter', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('should return a correctly formatted annotation object', () => {
-    // Mock the return values of the dependencies
-    (evalFormula as jest.Mock).mockReturnValue([[1, 2], [3, 4]]);
-    (parseAnnotationOpacity as jest.Mock).mockReturnValue(0.5);
+  test('should return smartDateDetailedFormatter when format is smartDateFormatter.id', () => {
+    const formatter = getTooltipFormatter('smart_date');
 
-    const result = transformFormulaAnnotation(mockLayer, mockData, mockSupersetColor);
-
-    expect(result).toEqual({
-      name: 'mock_name',
-      id: 'mock_name',
-      itemStyle: { color: mockSupersetColor },
-      lineStyle: {
-        opacity: 0.5,
-        type: 'solid',
-        width: 2,
-      },
-      type: 'line',
-      smooth: true,
-      data: [[1, 2], [3, 4]],  // Mocked return from evalFormula
-      symbolSize: 0,
-      z: 0,
-    });
-
-    // Ensure the mocks were called with the correct arguments
-    expect(evalFormula).toHaveBeenCalledWith(mockLayer, mockData);
-    expect(parseAnnotationOpacity).toHaveBeenCalledWith(mockLayer.opacity);
+    expect(formatter).toBe(smartDateDetailedFormatter);
+    expect(smartDateDetailedFormatter).not.toHaveBeenCalled(); // Just return the function reference
   });
 
-  test('should handle missing opacity and width', () => {
-    const mockLayerWithoutOpacity = {
-      ...mockLayer,
-      opacity: undefined,
-      width: undefined,
-    };
+  test('should return getTimeFormatter when format is provided and not smartDateFormatter.id', () => {
+    const mockFormat = 'custom_format';
+    const mockTimeFormatter = jest.fn();
+    (getTimeFormatter as jest.Mock).mockReturnValue(mockTimeFormatter);
 
-    (evalFormula as jest.Mock).mockReturnValue([[5, 6], [7, 8]]);
-    (parseAnnotationOpacity as jest.Mock).mockReturnValue(1); // Default opacity
+    const formatter = getTooltipFormatter(mockFormat);
 
-    const result = transformFormulaAnnotation(mockLayerWithoutOpacity, mockData, mockSupersetColor);
+    expect(getTimeFormatter).toHaveBeenCalledWith(mockFormat);
+    expect(formatter).toBe(mockTimeFormatter);
+  });
 
-    expect(result).toEqual({
-      name: 'mock_name',
-      id: 'mock_name',
-      itemStyle: { color: mockSupersetColor },
-      lineStyle: {
-        opacity: 1,  // Default mocked opacity
-        type: 'solid',
-        width: undefined,  // Missing width
-      },
-      type: 'line',
-      smooth: true,
-      data: [[5, 6], [7, 8]],
-      symbolSize: 0,
-      z: 0,
-    });
+  test('should return String when format is undefined', () => {
+    const formatter = getTooltipFormatter(undefined);
 
-    expect(parseAnnotationOpacity).toHaveBeenCalledWith(undefined);
+    expect(formatter).toBe(String);
+    expect(getTimeFormatter).not.toHaveBeenCalled();
+  });
+
+  test('should return String when format is an empty string', () => {
+    const formatter = getTooltipFormatter('');
+
+    expect(formatter).toBe(String);
+    expect(getTimeFormatter).not.toHaveBeenCalled();
   });
 });
