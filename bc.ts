@@ -1,4 +1,93 @@
 import React from 'react';
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import ValidatedPanelHeader from './ValidatedPanelHeader';
+import { CheckCircleOutlined } from '@ant-design/icons';
+import { t } from '@superset-ui/core';
+
+// Mock the translation function
+jest.mock('@superset-ui/core', () => ({
+  t: jest.fn((text) => text),
+}));
+
+describe('ValidatedPanelHeader', () => {
+  test('renders title and subtitle correctly', () => {
+    const title = 'Panel Title';
+    const subtitle = 'Panel Subtitle';
+    render(
+      <ValidatedPanelHeader
+        title={title}
+        subtitle={subtitle}
+        validateCheckStatus={false}
+      />
+    );
+
+    // Title and subtitle should be rendered
+    expect(screen.getByText(title)).toBeInTheDocument();
+    expect(screen.getByText(subtitle)).toBeInTheDocument();
+  });
+
+  test('renders validation checkmark when validateCheckStatus is true', () => {
+    const title = 'Panel Title';
+    render(
+      <ValidatedPanelHeader
+        title={title}
+        subtitle=""
+        validateCheckStatus={true}
+      />
+    );
+
+    // Checkmark should be rendered
+    expect(screen.getByRole('img', { hidden: true })).toHaveClass(
+      'anticon-check-circle',
+    );
+  });
+
+  test('renders asterisk when validateCheckStatus is false', () => {
+    const title = 'Panel Title';
+    render(
+      <ValidatedPanelHeader
+        title={title}
+        subtitle=""
+        validateCheckStatus={false}
+      />
+    );
+
+    // Asterisk should be rendered
+    expect(screen.getByText('*')).toBeInTheDocument();
+  });
+
+  test('renders data-test attribute when provided', () => {
+    const title = 'Panel Title';
+    const testId = 'panel-header-test-id';
+    render(
+      <ValidatedPanelHeader
+        title={title}
+        subtitle=""
+        validateCheckStatus={true}
+        testId={testId}
+      />
+    );
+
+    // Ensure the element has the test ID
+    expect(screen.getByTestId(testId)).toBeInTheDocument();
+  });
+
+  test('handles missing subtitle', () => {
+    const title = 'Panel Title';
+    render(
+      <ValidatedPanelHeader
+        title={title}
+        subtitle=""
+        validateCheckStatus={true}
+      />
+    );
+
+    // Subtitle should not be rendered if it's not provided
+    expect(screen.queryByText('Panel Subtitle')).not.toBeInTheDocument();
+  });
+});
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AllEntitiesTable from './AllEntitiesTable'; // Adjust the import path
 import { t } from '@superset-ui/core';
