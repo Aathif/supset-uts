@@ -1,75 +1,49 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { ThemeProvider } from '@superset-ui/core';
-import { Collapse } from 'antd';
-import StyledPanel from './StyledPanel';
+import RecipientIcon from './RecipientIcon';
+import { Tooltip } from 'src/components/Tooltip';
+import Icons from 'src/components/Icons';
+import { RecipientIconName } from '../types';
 
-// Mock the theme to pass into ThemeProvider
-const mockTheme = {
-  gridUnit: 4,
-  typography: {
-    sizes: { s: 12 },
-    weights: {
-      bold: 700,
-      normal: 400,
-    },
-  },
-  colors: {
-    grayscale: { base: '#333' },
-    warning: { dark1: '#ff9800' },
-    success: { base: '#4caf50' },
-  },
-};
+// Mock the Tooltip and Icons to ensure rendering works correctly
+jest.mock('src/components/Tooltip', () => ({ children, title }) => (
+  <div>
+    <span>{title}</span>
+    {children}
+  </div>
+));
 
-describe('StyledPanel', () => {
-  test('renders StyledPanel with custom styles and children', () => {
-    const { getByText } = render(
-      <ThemeProvider theme={mockTheme}>
-        <Collapse>
-          <StyledPanel header="Panel Header" key="1">
-            <div>Panel Content</div>
-          </StyledPanel>
-        </Collapse>
-      </ThemeProvider>,
-    );
+jest.mock('src/components/Icons', () => ({
+  Email: () => <span>Email Icon</span>,
+  Slack: () => <span>Slack Icon</span>,
+}));
 
-    // Check if the panel header is rendered
-    expect(getByText('Panel Header')).toBeInTheDocument();
+describe('RecipientIcon', () => {
+  test('renders Email icon with tooltip', () => {
+    const { getByText } = render(<RecipientIcon type={RecipientIconName.Email} />);
 
-    // Check if the panel content is rendered
-    expect(getByText('Panel Content')).toBeInTheDocument();
+    // Check if the email icon is rendered
+    expect(getByText('Email Icon')).toBeInTheDocument();
+
+    // Check if the tooltip for the email icon is correct
+    expect(getByText(RecipientIconName.Email)).toBeInTheDocument();
   });
 
-  test('applies the correct styles from the theme', () => {
-    const { container } = render(
-      <ThemeProvider theme={mockTheme}>
-        <Collapse>
-          <StyledPanel header="Panel Header" key="1">
-            <div>Panel Content</div>
-          </StyledPanel>
-        </Collapse>
-      </ThemeProvider>,
-    );
+  test('renders Slack icon with tooltip', () => {
+    const { getByText } = render(<RecipientIcon type={RecipientIconName.Slack} />);
 
-    const header = container.querySelector('.ant-collapse-header');
+    // Check if the Slack icon is rendered
+    expect(getByText('Slack Icon')).toBeInTheDocument();
 
-    // Check if styles are applied correctly
-    expect(header).toHaveStyle(`
-      padding: 0px 16px;
-    `);
+    // Check if the tooltip for the Slack icon is correct
+    expect(getByText(RecipientIconName.Slack)).toBeInTheDocument();
+  });
 
-    const title = container.querySelector('.collapse-panel-title');
-    expect(title).toHaveStyle(`
-      font-size: 16px;
-      font-weight: 700;
-    `);
+  test('renders nothing for unsupported icon type', () => {
+    const { container } = render(<RecipientIcon type="unsupported" />);
 
-    const subtitle = container.querySelector('.collapse-panel-subtitle');
-    expect(subtitle).toHaveStyle(`
-      color: #333;
-      font-size: 12px;
-      font-weight: 400;
-    `);
+    // Check if the component renders null for unsupported types
+    expect(container.firstChild).toBeNull();
   });
 });
