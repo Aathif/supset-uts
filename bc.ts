@@ -1,49 +1,64 @@
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import RecipientIcon from './RecipientIcon';
-import { Tooltip } from 'src/components/Tooltip';
-import Icons from 'src/components/Icons';
-import { RecipientIconName } from '../types';
+import NumberInput from './NumberInput';
 
-// Mock the Tooltip and Icons to ensure rendering works correctly
-jest.mock('src/components/Tooltip', () => ({ children, title }) => (
-  <div>
-    <span>{title}</span>
-    {children}
-  </div>
-));
+describe('NumberInput', () => {
+  const defaultProps = {
+    timeUnit: 'ms',
+    min: 0,
+    name: 'duration',
+    value: '1000',
+    placeholder: 'Enter time',
+    onChange: jest.fn(),
+  };
 
-jest.mock('src/components/Icons', () => ({
-  Email: () => <span>Email Icon</span>,
-  Slack: () => <span>Slack Icon</span>,
-}));
+  test('renders with correct value and time unit when not focused', () => {
+    const { getByPlaceholderText } = render(<NumberInput {...defaultProps} />);
 
-describe('RecipientIcon', () => {
-  test('renders Email icon with tooltip', () => {
-    const { getByText } = render(<RecipientIcon type={RecipientIconName.Email} />);
-
-    // Check if the email icon is rendered
-    expect(getByText('Email Icon')).toBeInTheDocument();
-
-    // Check if the tooltip for the email icon is correct
-    expect(getByText(RecipientIconName.Email)).toBeInTheDocument();
+    const input = getByPlaceholderText('Enter time') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe('1000 ms');
   });
 
-  test('renders Slack icon with tooltip', () => {
-    const { getByText } = render(<RecipientIcon type={RecipientIconName.Slack} />);
+  test('removes time unit on focus', () => {
+    const { getByPlaceholderText } = render(<NumberInput {...defaultProps} />);
 
-    // Check if the Slack icon is rendered
-    expect(getByText('Slack Icon')).toBeInTheDocument();
+    const input = getByPlaceholderText('Enter time') as HTMLInputElement;
+    fireEvent.focus(input);
 
-    // Check if the tooltip for the Slack icon is correct
-    expect(getByText(RecipientIconName.Slack)).toBeInTheDocument();
+    expect(input.value).toBe('1000'); // Time unit removed when focused
   });
 
-  test('renders nothing for unsupported icon type', () => {
-    const { container } = render(<RecipientIcon type="unsupported" />);
+  test('adds time unit back on blur', () => {
+    const { getByPlaceholderText } = render(<NumberInput {...defaultProps} />);
 
-    // Check if the component renders null for unsupported types
-    expect(container.firstChild).toBeNull();
+    const input = getByPlaceholderText('Enter time') as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+
+    expect(input.value).toBe('1000 ms'); // Time unit added back when blurred
+  });
+
+  test('calls onChange when value changes', () => {
+    const onChangeMock = jest.fn();
+    const props = { ...defaultProps, onChange: onChangeMock };
+    const { getByPlaceholderText } = render(<NumberInput {...props} />);
+
+    const input = getByPlaceholderText('Enter time') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '2000' } });
+
+    expect(onChangeMock).toHaveBeenCalledTimes(1);
+    expect(onChangeMock).toHaveBeenCalledWith(expect.any(Object));
+    expect(input.value).toBe('2000 ms');
+  });
+
+  test('displays empty string if no value is passed', () => {
+    const { getByPlaceholderText } = render(
+      <NumberInput {...defaultProps} value="" />,
+    );
+
+    const input = getByPlaceholderText('Enter time') as HTMLInputElement;
+    expect(input.value).toBe('');
   });
 });
