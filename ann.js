@@ -1,22 +1,28 @@
-import { getTooltipFormatter } from './yourFile';
-import { smartDateFormatter, smartDateDetailedFormatter, getTimeFormatter } from '@superset-ui/core';
+import { getXAxisFormatter } from './yourFile';
+import { smartDateFormatter, getTimeFormatter } from '@superset-ui/core';
 
 jest.mock('@superset-ui/core', () => ({
   smartDateFormatter: { id: 'smart_date' },
-  smartDateDetailedFormatter: jest.fn(),
   getTimeFormatter: jest.fn(),
 }));
 
-describe('getTooltipFormatter', () => {
+describe('getXAxisFormatter', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('should return smartDateDetailedFormatter when format is smartDateFormatter.id', () => {
-    const formatter = getTooltipFormatter('smart_date');
+  test('should return undefined when format is smartDateFormatter.id', () => {
+    const formatter = getXAxisFormatter('smart_date');
+    
+    expect(formatter).toBeUndefined();
+    expect(getTimeFormatter).not.toHaveBeenCalled();
+  });
 
-    expect(formatter).toBe(smartDateDetailedFormatter);
-    expect(smartDateDetailedFormatter).not.toHaveBeenCalled(); // Just return the function reference
+  test('should return undefined when format is falsy (undefined or null)', () => {
+    const formatter = getXAxisFormatter(undefined);
+    
+    expect(formatter).toBeUndefined();
+    expect(getTimeFormatter).not.toHaveBeenCalled();
   });
 
   test('should return getTimeFormatter when format is provided and not smartDateFormatter.id', () => {
@@ -24,23 +30,16 @@ describe('getTooltipFormatter', () => {
     const mockTimeFormatter = jest.fn();
     (getTimeFormatter as jest.Mock).mockReturnValue(mockTimeFormatter);
 
-    const formatter = getTooltipFormatter(mockFormat);
+    const formatter = getXAxisFormatter(mockFormat);
 
     expect(getTimeFormatter).toHaveBeenCalledWith(mockFormat);
     expect(formatter).toBe(mockTimeFormatter);
   });
 
-  test('should return String when format is undefined', () => {
-    const formatter = getTooltipFormatter(undefined);
-
-    expect(formatter).toBe(String);
-    expect(getTimeFormatter).not.toHaveBeenCalled();
-  });
-
   test('should return String when format is an empty string', () => {
-    const formatter = getTooltipFormatter('');
+    const formatter = getXAxisFormatter('');
 
-    expect(formatter).toBe(String);
+    expect(formatter).toBeUndefined();  // For an empty string, it will be treated as falsy
     expect(getTimeFormatter).not.toHaveBeenCalled();
   });
 });
