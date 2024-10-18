@@ -1,195 +1,75 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import ValidatedPanelHeader from './ValidatedPanelHeader';
-import { CheckCircleOutlined } from '@ant-design/icons';
-import { t } from '@superset-ui/core';
+import { ThemeProvider } from '@superset-ui/core';
+import { Collapse } from 'antd';
+import StyledPanel from './StyledPanel';
 
-// Mock the translation function
-jest.mock('@superset-ui/core', () => ({
-  t: jest.fn((text) => text),
-}));
-
-describe('ValidatedPanelHeader', () => {
-  test('renders title and subtitle correctly', () => {
-    const title = 'Panel Title';
-    const subtitle = 'Panel Subtitle';
-    render(
-      <ValidatedPanelHeader
-        title={title}
-        subtitle={subtitle}
-        validateCheckStatus={false}
-      />
-    );
-
-    // Title and subtitle should be rendered
-    expect(screen.getByText(title)).toBeInTheDocument();
-    expect(screen.getByText(subtitle)).toBeInTheDocument();
-  });
-
-  test('renders validation checkmark when validateCheckStatus is true', () => {
-    const title = 'Panel Title';
-    render(
-      <ValidatedPanelHeader
-        title={title}
-        subtitle=""
-        validateCheckStatus={true}
-      />
-    );
-
-    // Checkmark should be rendered
-    expect(screen.getByRole('img', { hidden: true })).toHaveClass(
-      'anticon-check-circle',
-    );
-  });
-
-  test('renders asterisk when validateCheckStatus is false', () => {
-    const title = 'Panel Title';
-    render(
-      <ValidatedPanelHeader
-        title={title}
-        subtitle=""
-        validateCheckStatus={false}
-      />
-    );
-
-    // Asterisk should be rendered
-    expect(screen.getByText('*')).toBeInTheDocument();
-  });
-
-  test('renders data-test attribute when provided', () => {
-    const title = 'Panel Title';
-    const testId = 'panel-header-test-id';
-    render(
-      <ValidatedPanelHeader
-        title={title}
-        subtitle=""
-        validateCheckStatus={true}
-        testId={testId}
-      />
-    );
-
-    // Ensure the element has the test ID
-    expect(screen.getByTestId(testId)).toBeInTheDocument();
-  });
-
-  test('handles missing subtitle', () => {
-    const title = 'Panel Title';
-    render(
-      <ValidatedPanelHeader
-        title={title}
-        subtitle=""
-        validateCheckStatus={true}
-      />
-    );
-
-    // Subtitle should not be rendered if it's not provided
-    expect(screen.queryByText('Panel Subtitle')).not.toBeInTheDocument();
-  });
-});
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import AllEntitiesTable from './AllEntitiesTable'; // Adjust the import path
-import { t } from '@superset-ui/core';
-
-const mockedSetShowTagModal = jest.fn();
-
-const mockObjects = {
-  dashboard: [
-    {
-      id: 1,
-      type: 'dashboard',
-      name: 'Sales Dashboard',
-      url: '/dashboard/1',
-      changed_on: '2023-08-10T12:00:00Z',
-      created_by: 1,
-      creator: 'Admin',
-      owners: [{ id: 1, first_name: 'Admin', last_name: 'User' }],
-      tags: [{ id: 1, name: 'Q1', type: 1 }],
+// Mock the theme to pass into ThemeProvider
+const mockTheme = {
+  gridUnit: 4,
+  typography: {
+    sizes: { s: 12 },
+    weights: {
+      bold: 700,
+      normal: 400,
     },
-  ],
-  chart: [
-    {
-      id: 2,
-      type: 'chart',
-      name: 'Sales by Country',
-      url: '/chart/2',
-      changed_on: '2023-08-11T12:00:00Z',
-      created_by: 2,
-      creator: 'User 2',
-      owners: [{ id: 2, first_name: 'John', last_name: 'Doe' }],
-      tags: [{ id: 2, name: 'Revenue', type: 1 }],
-    },
-  ],
-  query: [],
+  },
+  colors: {
+    grayscale: { base: '#333' },
+    warning: { dark1: '#ff9800' },
+    success: { base: '#4caf50' },
+  },
 };
 
-describe('AllEntitiesTable', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should render tables for dashboards and charts when data is available', () => {
-    render(
-      <AllEntitiesTable
-        search=""
-        setShowTagModal={mockedSetShowTagModal}
-        objects={mockObjects}
-      />
+describe('StyledPanel', () => {
+  test('renders StyledPanel with custom styles and children', () => {
+    const { getByText } = render(
+      <ThemeProvider theme={mockTheme}>
+        <Collapse>
+          <StyledPanel header="Panel Header" key="1">
+            <div>Panel Content</div>
+          </StyledPanel>
+        </Collapse>
+      </ThemeProvider>,
     );
 
-    // Check if dashboard section is rendered
-    expect(screen.getByText(t('Dashboards'))).toBeInTheDocument();
-    expect(screen.getByText('Sales Dashboard')).toBeInTheDocument();
+    // Check if the panel header is rendered
+    expect(getByText('Panel Header')).toBeInTheDocument();
 
-    // Check if chart section is rendered
-    expect(screen.getByText(t('Charts'))).toBeInTheDocument();
-    expect(screen.getByText('Sales by Country')).toBeInTheDocument();
-
-    // Check if queries section is rendered but empty
-    expect(screen.getByText(t('Queries'))).toBeInTheDocument();
-    expect(screen.queryByText('Some Query')).not.toBeInTheDocument();
+    // Check if the panel content is rendered
+    expect(getByText('Panel Content')).toBeInTheDocument();
   });
 
-  it('should render the empty state when there are no objects', () => {
-    render(
-      <AllEntitiesTable
-        search=""
-        setShowTagModal={mockedSetShowTagModal}
-        objects={{ dashboard: [], chart: [], query: [] }}
-      />
+  test('applies the correct styles from the theme', () => {
+    const { container } = render(
+      <ThemeProvider theme={mockTheme}>
+        <Collapse>
+          <StyledPanel header="Panel Header" key="1">
+            <div>Panel Content</div>
+          </StyledPanel>
+        </Collapse>
+      </ThemeProvider>,
     );
 
-    // Check for empty state message
-    expect(
-      screen.getByText(t('No entities have this tag currently assigned'))
-    ).toBeInTheDocument();
+    const header = container.querySelector('.ant-collapse-header');
 
-    // Check for the "Add tag to entities" button
-    const button = screen.getByText(t('Add tag to entities'));
-    expect(button).toBeInTheDocument();
+    // Check if styles are applied correctly
+    expect(header).toHaveStyle(`
+      padding: 0px 16px;
+    `);
 
-    // Test button click
-    fireEvent.click(button);
-    expect(mockedSetShowTagModal).toHaveBeenCalledWith(true);
-  });
+    const title = container.querySelector('.collapse-panel-title');
+    expect(title).toHaveStyle(`
+      font-size: 16px;
+      font-weight: 700;
+    `);
 
-  it('should render the tags and owners correctly', () => {
-    render(
-      <AllEntitiesTable
-        search=""
-        setShowTagModal={mockedSetShowTagModal}
-        objects={mockObjects}
-      />
-    );
-
-    // Check for tags in the dashboards and charts
-    expect(screen.getByText('Q1')).toBeInTheDocument(); // Tag for dashboard
-    expect(screen.getByText('Revenue')).toBeInTheDocument(); // Tag for chart
-
-    // Check for owners in the dashboards and charts
-    expect(screen.getByText('Admin User')).toBeInTheDocument(); // Owner for dashboard
-    expect(screen.getByText('John Doe')).toBeInTheDocument(); // Owner for chart
+    const subtitle = container.querySelector('.collapse-panel-subtitle');
+    expect(subtitle).toHaveStyle(`
+      color: #333;
+      font-size: 12px;
+      font-weight: 400;
+    `);
   });
 });
-
