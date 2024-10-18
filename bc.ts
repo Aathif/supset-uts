@@ -1,111 +1,98 @@
 import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { NotificationMethod } from './NotificationMethod';
-import { NotificationSetting } from '../types';
 import { ThemeProvider } from '@superset-ui/core';
 import supersetTheme from 'src/style/supersetTheme';
-
-const mockUpdate = jest.fn();
-const mockRemove = jest.fn();
-
-const notificationSetting: NotificationSetting = {
-  method: 'Email',
-  recipients: 'example@domain.com',
-  options: ['Email', 'Slack'],
-};
+import AlertStatusIcon from './AlertStatusIcon';
+import { AlertState } from '../types';
+import Icons from 'src/components/Icons';
 
 const renderWithTheme = (ui: React.ReactElement) => {
   return render(<ThemeProvider theme={supersetTheme}>{ui}</ThemeProvider>);
 };
 
-describe('NotificationMethod component', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
+describe('AlertStatusIcon component', () => {
+  test('renders "Report sent" when state is Success and report is enabled', () => {
+    renderWithTheme(
+      <AlertStatusIcon state={AlertState.Success} isReportEnabled={true} />
+    );
+
+    const tooltip = screen.getByText('Report sent');
+    expect(tooltip).toBeInTheDocument();
+    const checkIcon = screen.getByTestId('icon-check'); // Assuming Icons.Check has a data-testid
+    expect(checkIcon).toBeInTheDocument();
   });
 
-  test('renders NotificationMethod correctly', () => {
+  test('renders "Alert triggered, notification sent" when state is Success and report is not enabled', () => {
     renderWithTheme(
-      <NotificationMethod
-        setting={notificationSetting}
-        index={0}
-        onUpdate={mockUpdate}
-        onRemove={mockRemove}
-      />
+      <AlertStatusIcon state={AlertState.Success} isReportEnabled={false} />
     );
 
-    expect(screen.getByText('Notification Method')).toBeInTheDocument();
-    expect(screen.getByText('Email recipients')).toBeInTheDocument();
-    expect(screen.getByTestId('recipients')).toHaveValue(
-      'example@domain.com',
-    );
+    const tooltip = screen.getByText('Alert triggered, notification sent');
+    expect(tooltip).toBeInTheDocument();
+    const alertIcon = screen.getByTestId('icon-alert-solid-small'); // Assuming Icons.AlertSolidSmall has a data-testid
+    expect(alertIcon).toBeInTheDocument();
   });
 
-  test('calls onUpdate when method is changed', () => {
+  test('renders "Report sending" when state is Working and report is enabled', () => {
     renderWithTheme(
-      <NotificationMethod
-        setting={notificationSetting}
-        index={0}
-        onUpdate={mockUpdate}
-        onRemove={mockRemove}
-      />
+      <AlertStatusIcon state={AlertState.Working} isReportEnabled={true} />
     );
 
-    const selectMethod = screen.getByPlaceholderText('Select Delivery Method');
-    fireEvent.change(selectMethod, { target: { value: 'Slack' } });
-
-    expect(mockUpdate).toHaveBeenCalledWith(0, {
-      ...notificationSetting,
-      method: 'Slack',
-      recipients: '',
-    });
+    const tooltip = screen.getByText('Report sending');
+    expect(tooltip).toBeInTheDocument();
+    const runningIcon = screen.getByTestId('icon-running'); // Assuming Icons.Running has a data-testid
+    expect(runningIcon).toBeInTheDocument();
   });
 
-  test('calls onUpdate when recipients are changed', () => {
+  test('renders "Alert running" when state is Working and report is not enabled', () => {
     renderWithTheme(
-      <NotificationMethod
-        setting={notificationSetting}
-        index={0}
-        onUpdate={mockUpdate}
-        onRemove={mockRemove}
-      />
+      <AlertStatusIcon state={AlertState.Working} isReportEnabled={false} />
     );
 
-    const recipientInput = screen.getByTestId('recipients');
-    fireEvent.change(recipientInput, { target: { value: 'test@domain.com' } });
-
-    expect(mockUpdate).toHaveBeenCalledWith(0, {
-      ...notificationSetting,
-      recipients: 'test@domain.com',
-    });
+    const tooltip = screen.getByText('Alert running');
+    expect(tooltip).toBeInTheDocument();
+    const runningIcon = screen.getByTestId('icon-running'); // Assuming Icons.Running has a data-testid
+    expect(runningIcon).toBeInTheDocument();
   });
 
-  test('calls onRemove when remove button is clicked', () => {
+  test('renders "Report failed" when state is Error and report is enabled', () => {
     renderWithTheme(
-      <NotificationMethod
-        setting={notificationSetting}
-        index={1}
-        onUpdate={mockUpdate}
-        onRemove={mockRemove}
-      />
+      <AlertStatusIcon state={AlertState.Error} isReportEnabled={true} />
     );
 
-    const deleteButton = screen.getByRole('button');
-    fireEvent.click(deleteButton);
-
-    expect(mockRemove).toHaveBeenCalledWith(1);
+    const tooltip = screen.getByText('Report failed');
+    expect(tooltip).toBeInTheDocument();
+    const errorIcon = screen.getByTestId('icon-x-small'); // Assuming Icons.XSmall has a data-testid
+    expect(errorIcon).toBeInTheDocument();
   });
 
-  test('does not render delete button for the first index', () => {
+  test('renders "Alert failed" when state is Error and report is not enabled', () => {
     renderWithTheme(
-      <NotificationMethod
-        setting={notificationSetting}
-        index={0}
-        onUpdate={mockUpdate}
-        onRemove={mockRemove}
-      />
+      <AlertStatusIcon state={AlertState.Error} isReportEnabled={false} />
     );
 
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    const tooltip = screen.getByText('Alert failed');
+    expect(tooltip).toBeInTheDocument();
+    const errorIcon = screen.getByTestId('icon-x-small'); // Assuming Icons.XSmall has a data-testid
+    expect(errorIcon).toBeInTheDocument();
+  });
+
+  test('renders "Nothing triggered" when state is Noop', () => {
+    renderWithTheme(<AlertStatusIcon state={AlertState.Noop} isReportEnabled={false} />);
+
+    const tooltip = screen.getByText('Nothing triggered');
+    expect(tooltip).toBeInTheDocument();
+    const checkIcon = screen.getByTestId('icon-check'); // Assuming Icons.Check has a data-testid
+    expect(checkIcon).toBeInTheDocument();
+  });
+
+  test('renders "Alert Triggered, In Grace Period" when state is Grace', () => {
+    renderWithTheme(<AlertStatusIcon state={AlertState.Grace} isReportEnabled={false} />);
+
+    const tooltip = screen.getByText('Alert Triggered, In Grace Period');
+    expect(tooltip).toBeInTheDocument();
+    const alertIcon = screen.getByTestId('icon-alert-solid-small'); // Assuming Icons.AlertSolidSmall has a data-testid
+    expect(alertIcon).toBeInTheDocument();
   });
 });
