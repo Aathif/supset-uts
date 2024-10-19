@@ -1,117 +1,43 @@
-import { getPadding } from './transformers';
-import { TIMESERIES_CONSTANTS } from '../constants';
-import { getChartPadding } from './utils/chartPadding'; // Assuming this is the file where getChartPadding is implemented
+import React from 'react';
+import { render } from '@testing-library/react';
+import { ControlFormRow } from './ControlFormRow';
+import { useTheme } from '@superset-ui/core';
 
-jest.mock('./utils/chartPadding', () => ({
-  getChartPadding: jest.fn(),
+// Mocking the `useTheme` hook
+jest.mock('@superset-ui/core', () => ({
+  useTheme: jest.fn(),
 }));
 
-describe('getPadding', () => {
+describe('ControlFormRow', () => {
+  const mockTheme = {
+    gridUnit: 8, // Example gridUnit value for testing
+  };
+
   beforeEach(() => {
+    (useTheme as jest.Mock).mockReturnValue(mockTheme);
+  });
+
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
-  const mockConstants = {
-    yAxisLabelTopOffset: 10,
-    gridOffsetTop: 20,
-    gridOffsetBottomZoomable: 30,
-    gridOffsetBottom: 40,
-    gridOffsetLeft: 50,
-    gridOffsetRight: 60,
-  };
-
-  TIMESERIES_CONSTANTS.yAxisLabelTopOffset = mockConstants.yAxisLabelTopOffset;
-  TIMESERIES_CONSTANTS.gridOffsetTop = mockConstants.gridOffsetTop;
-  TIMESERIES_CONSTANTS.gridOffsetBottomZoomable = mockConstants.gridOffsetBottomZoomable;
-  TIMESERIES_CONSTANTS.gridOffsetBottom = mockConstants.gridOffsetBottom;
-  TIMESERIES_CONSTANTS.gridOffsetLeft = mockConstants.gridOffsetLeft;
-  TIMESERIES_CONSTANTS.gridOffsetRight = mockConstants.gridOffsetRight;
-
-  test('should return correct padding when showLegend is true and legendOrientation is Right', () => {
-    const showLegend = true;
-    const legendOrientation = 'Right';
-    const addYAxisLabelOffset = true;
-    const zoomable = true;
-    const margin = {};
-
-    getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable, margin);
-
-    expect(getChartPadding).toHaveBeenCalledWith(
-      showLegend,
-      legendOrientation,
-      margin,
-      {
-        top: mockConstants.gridOffsetTop + mockConstants.yAxisLabelTopOffset,
-        bottom: mockConstants.gridOffsetBottomZoomable,
-        left: mockConstants.gridOffsetLeft,
-        right: 0, // Since legendOrientation is Right
-      }
+  test('renders children and applies correct styling', () => {
+    const { getByText } = render(
+      <ControlFormRow>
+        <div>Child 1</div>
+        <div>Child 2</div>
+      </ControlFormRow>
     );
-  });
 
-  test('should return correct padding when showLegend is false and zoomable is false', () => {
-    const showLegend = false;
-    const legendOrientation = 'Top';
-    const addYAxisLabelOffset = false;
-    const zoomable = false;
-    const margin = {};
+    // Check that the children are rendered
+    expect(getByText('Child 1')).toBeInTheDocument();
+    expect(getByText('Child 2')).toBeInTheDocument();
 
-    getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable, margin);
-
-    expect(getChartPadding).toHaveBeenCalledWith(
-      showLegend,
-      legendOrientation,
-      margin,
-      {
-        top: mockConstants.gridOffsetTop,
-        bottom: mockConstants.gridOffsetBottom,
-        left: mockConstants.gridOffsetLeft,
-        right: mockConstants.gridOffsetRight,
-      }
-    );
-  });
-
-  test('should return correct padding when addYAxisLabelOffset is true', () => {
-    const showLegend = true;
-    const legendOrientation = 'Left';
-    const addYAxisLabelOffset = true;
-    const zoomable = false;
-    const margin = {};
-
-    getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable, margin);
-
-    expect(getChartPadding).toHaveBeenCalledWith(
-      showLegend,
-      legendOrientation,
-      margin,
-      {
-        top: mockConstants.gridOffsetTop + mockConstants.yAxisLabelTopOffset,
-        bottom: mockConstants.gridOffsetBottom,
-        left: mockConstants.gridOffsetLeft,
-        right: mockConstants.gridOffsetRight,
-      }
-    );
-  });
-
-  test('should return correct padding when zoomable is true', () => {
-    const showLegend = false;
-    const legendOrientation = 'Bottom';
-    const addYAxisLabelOffset = false;
-    const zoomable = true;
-    const margin = {};
-
-    getPadding(showLegend, legendOrientation, addYAxisLabelOffset, zoomable, margin);
-
-    expect(getChartPadding).toHaveBeenCalledWith(
-      showLegend,
-      legendOrientation,
-      margin,
-      {
-        top: mockConstants.gridOffsetTop,
-        bottom: mockConstants.gridOffsetBottomZoomable,
-        left: mockConstants.gridOffsetLeft,
-        right: mockConstants.gridOffsetRight,
-      }
-    );
+    // Check that the flex container has the correct styles
+    const formRow = getByText('Child 1').parentElement;
+    expect(formRow).toHaveStyle('display: flex');
+    expect(formRow).toHaveStyle('flex-wrap: nowrap');
+    expect(formRow).toHaveStyle('margin-bottom: 8px'); // 8 comes from mockTheme.gridUnit
+    expect(formRow).toHaveStyle('max-width: 100%');
   });
 });
