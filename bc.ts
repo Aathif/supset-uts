@@ -1,75 +1,88 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
+import { ConditionalFormattingControl } from './ConditionalFormattingControl';
 import { FormattingPopover } from './FormattingPopover';
-import { FormattingPopoverContent } from './FormattingPopoverContent';
-import Popover from 'src/components/Popover';
+import { Comparator } from '@superset-ui/chart-controls';
+import { ThemeProvider } from 'styled-components';
+import { supersetTheme } from '@superset-ui/core';
 
-// Mock Popover and FormattingPopoverContent
-jest.mock('src/components/Popover', () => ({ children, ...props }) => (
-  <div data-testid="popover">{children}</div>
-));
-jest.mock('./FormattingPopoverContent', () => ({
-  FormattingPopoverContent: jest.fn(({ onChange }) => (
-    <div data-testid="popover-content">
-      <button onClick={() => onChange({ test: 'newConfig' })}>
-        Save Config
+// Mock FormattingPopover
+jest.mock('./FormattingPopover', () => ({
+  FormattingPopover: ({ children, onChange }) => (
+    <div>
+      <button onClick={() => onChange({ column: 'test', operator: Comparator.Equal, targetValue: '10' })}>
+        Save
       </button>
+      {children}
     </div>
-  )),
+  ),
 }));
 
-describe('FormattingPopover', () => {
-  const mockOnChange = jest.fn();
+describe('ConditionalFormattingControl', () => {
   const defaultProps = {
-    title: 'Test Popover',
-    columns: ['column1', 'column2'],
-    config: { test: 'config' },
-    onChange: mockOnChange,
+    value: [],
+    onChange: jest.fn(),
+    columnOptions: [{ value: 'column1', label: 'Column 1' }],
+    verboseMap: { column1: 'Column 1' },
+    removeIrrelevantConditions: false,
   };
 
-  afterEach(() => {
+  const renderComponent = (props = {}) => {
+    return render(
+      <ThemeProvider theme={supersetTheme}>
+        <ConditionalFormattingControl {...defaultProps} {...props} />
+      </ThemeProvider>,
+    );
+  };
+
+  beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders popover and children', () => {
-    render(
-      <FormattingPopover {...defaultProps}>
-        <div>Popover Trigger</div>
-      </FormattingPopover>,
-    );
-
-    expect(screen.getByText('Popover Trigger')).toBeInTheDocument();
+  test('renders without crashing', () => {
+    renderComponent();
+    expect(screen.getByText('Add new color formatter')).toBeInTheDocument();
   });
 
-  test('opens popover on click', () => {
-    render(
-      <FormattingPopover {...defaultProps}>
-        <div>Popover Trigger</div>
-      </FormattingPopover>,
-    );
+  test('adds a new formatter when clicking "Add new color formatter"', () => {
+    renderComponent();
 
-    // Trigger popover by clicking the trigger
-    fireEvent.click(screen.getByText('Popover Trigger'));
-    
-    // Ensure popover content is rendered
-    expect(screen.getByTestId('popover')).toBeInTheDocument();
-    expect(screen.getByTestId('popover-content')).toBeInTheDocument();
+    // Click "Add new color formatter"
+    fireEvent.click(screen.getByText('Add new color formatter'));
+
+    // Click "Save" in the mocked FormattingPopover
+    fireEvent.click(screen.getByText('Save'));
+
+    // Expect onChange to be called with the new formatter config
+    expect(defaultProps.onChange).toHaveBeenCalledWith([
+      { column: 'test', operator: Comparator.Equal, targetValue: '10' },
+    ]);
   });
 
-  test('calls onChange with new config on save', () => {
-    render(
-      <FormattingPopover {...defaultProps}>
-        <div>Popover Trigger</div>
-      </FormattingPopover>,
-    );
+  test('removes a formatter when clicking the delete button', () => {
+    const initialConfig = [{ column: 'column1', operator: Comparator.Equal, targetValue: '100' }];
+    renderComponent({ value: initialConfig });
 
-    // Trigger popover by clicking the trigger
-    fireEvent.click(screen.getByText('Popover Trigger'));
+    // Click the delete button
+    fireEvent.click(screen.getByRole('button', { name: /xsmall/i }));
 
-    // Simulate saving new config
-    fireEvent.click(screen.getByText('Save Config'));
+    // Expect onChange to be called with an empty array (formatter removed)
+    expect(defaultProps.onChange).toHaveBeenCalledWith([]);
+  });
 
-    // Check if onChange is called with new config
-    expect(mockOnChange).toHaveBeenCalledWith({ test: 'newConfig' });
+  test('edits a formatter when clicking the save button in edit mode', () => {
+    const initialConfig = [{ column: 'column1', operator: Comparator.Equal, targetValue: '100' }];
+    renderComponent({ value: initialConfig });
+
+    // Click on the existing formatter to open the edit popover
+    fireEvent.click(screen.getByText('Column 1 = 100'));
+
+    // Click "Save" in the mocked FormattingPopover to edit the formatter
+    fireEvent.click(screen.getByText('Save'));
+
+    // Expect onChange to be called with the edited formatter config
+    expect(defaultProps.onChange).toHaveBeenCalledWith([
+      { column: 'test', operator: Comparator.Equal, targetValue: '10' },
+    ]);
   });
 });
