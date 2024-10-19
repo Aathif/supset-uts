@@ -1,36 +1,53 @@
 import React from 'react';
 import { render, fireEvent, screen } from '@testing-library/react';
-import { ConditionalFormattingControl } from './ConditionalFormattingControl';
-import { FormattingPopover } from './FormattingPopover';
-import { Comparator } from '@superset-ui/chart-controls';
+import ContourPopoverTrigger from './ContourPopoverTrigger';
+import ControlPopover from '../ControlPopover/ControlPopover';
+import ContourPopoverControl from './ContourPopoverControl';
 import { ThemeProvider } from 'styled-components';
 import { supersetTheme } from '@superset-ui/core';
 
-// Mock FormattingPopover
-jest.mock('./FormattingPopover', () => ({
-  FormattingPopover: ({ children, onChange }) => (
+// Mock ControlPopover and ContourPopoverControl
+jest.mock('../ControlPopover/ControlPopover', () => ({
+  __esModule: true,
+  default: ({ children, content, onVisibleChange, visible }) => (
     <div>
-      <button onClick={() => onChange({ column: 'test', operator: Comparator.Equal, targetValue: '10' })}>
-        Save
+      <button
+        onClick={() => onVisibleChange(!visible)}
+        aria-label="popover-trigger"
+      >
+        {children}
       </button>
-      {children}
+      {visible && <div>{content}</div>}
     </div>
   ),
 }));
 
-describe('ConditionalFormattingControl', () => {
+jest.mock('./ContourPopoverControl', () => ({
+  __esModule: true,
+  default: ({ onClose, onSave }) => (
+    <div>
+      <button onClick={() => onSave({ contourValue: 'newContour' })}>
+        Save
+      </button>
+      <button onClick={onClose}>Close</button>
+    </div>
+  ),
+}));
+
+describe('ContourPopoverTrigger', () => {
   const defaultProps = {
-    value: [],
-    onChange: jest.fn(),
-    columnOptions: [{ value: 'column1', label: 'Column 1' }],
-    verboseMap: { column1: 'Column 1' },
-    removeIrrelevantConditions: false,
+    value: 'initialContour',
+    saveContour: jest.fn(),
+    isControlled: false,
+    visible: false,
+    toggleVisibility: jest.fn(),
+    children: <span>Click Me</span>,
   };
 
   const renderComponent = (props = {}) => {
     return render(
       <ThemeProvider theme={supersetTheme}>
-        <ConditionalFormattingControl {...defaultProps} {...props} />
+        <ContourPopoverTrigger {...defaultProps} {...props} />
       </ThemeProvider>,
     );
   };
@@ -41,48 +58,63 @@ describe('ConditionalFormattingControl', () => {
 
   test('renders without crashing', () => {
     renderComponent();
-    expect(screen.getByText('Add new color formatter')).toBeInTheDocument();
+    expect(screen.getByText('Click Me')).toBeInTheDocument();
   });
 
-  test('adds a new formatter when clicking "Add new color formatter"', () => {
+  test('opens the popover when the trigger is clicked', () => {
     renderComponent();
 
-    // Click "Add new color formatter"
-    fireEvent.click(screen.getByText('Add new color formatter'));
+    // Click to open popover
+    fireEvent.click(screen.getByLabelText('popover-trigger'));
 
-    // Click "Save" in the mocked FormattingPopover
-    fireEvent.click(screen.getByText('Save'));
-
-    // Expect onChange to be called with the new formatter config
-    expect(defaultProps.onChange).toHaveBeenCalledWith([
-      { column: 'test', operator: Comparator.Equal, targetValue: '10' },
-    ]);
+    // Expect the ContourPopoverControl content to be visible
+    expect(screen.getByText('Save')).toBeInTheDocument();
+    expect(screen.getByText('Close')).toBeInTheDocument();
   });
 
-  test('removes a formatter when clicking the delete button', () => {
-    const initialConfig = [{ column: 'column1', operator: Comparator.Equal, targetValue: '100' }];
-    renderComponent({ value: initialConfig });
+  test('closes the popover when the Close button is clicked', () => {
+    renderComponent();
 
-    // Click the delete button
-    fireEvent.click(screen.getByRole('button', { name: /xsmall/i }));
+    // Open popover
+    fireEvent.click(screen.getByLabelText('popover-trigger'));
 
-    // Expect onChange to be called with an empty array (formatter removed)
-    expect(defaultProps.onChange).toHaveBeenCalledWith([]);
+    // Click the Close button
+    fireEvent.click(screen.getByText('Close'));
+
+    // Expect the popover content to be closed (not in the document)
+    expect(screen.queryByText('Save')).not.toBeInTheDocument();
+    expect(screen.queryByText('Close')).not.toBeInTheDocument();
   });
 
-  test('edits a formatter when clicking the save button in edit mode', () => {
-    const initialConfig = [{ column: 'column1', operator: Comparator.Equal, targetValue: '100' }];
-    renderComponent({ value: initialConfig });
+  test('calls saveContour when Save button is clicked', () => {
+    const saveContourMock = jest.fn();
+    renderComponent({ saveContour: saveContourMock });
 
-    // Click on the existing formatter to open the edit popover
-    fireEvent.click(screen.getByText('Column 1 = 100'));
+    // Open popover
+    fireEvent.click(screen.getByLabelText('popover-trigger'));
 
-    // Click "Save" in the mocked FormattingPopover to edit the formatter
+    // Click the Save button
     fireEvent.click(screen.getByText('Save'));
 
-    // Expect onChange to be called with the edited formatter config
-    expect(defaultProps.onChange).toHaveBeenCalledWith([
-      { column: 'test', operator: Comparator.Equal, targetValue: '10' },
-    ]);
+    // Expect saveContour to be called with new contour value
+    expect(saveContourMock).toHaveBeenCalledWith({ contourValue: 'newContour' });
+  });
+
+  test('controlled visibility: uses controlled visibility state when isControlled is true', () => {
+    const toggleVisibilityMock = jest.fn();
+    renderComponent({
+      isControlled: true,
+      visible: true,
+      toggleVisibility: toggleVisibilityMock,
+    });
+
+    // Check that popover is visible initially
+    expect(screen.getByText('Save')).toBeInTheDocument();
+
+    // Trigger visibility change (toggle)
+    fireEvent.click(screen.getByLabelText('popover-trigger'));
+
+    // Expect toggleVisibility to be called with the new visibility state
+    expect(toggleVisibilityMock).toHaveBeenCalledWith(false);
   });
 });
