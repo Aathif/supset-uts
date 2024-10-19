@@ -1,43 +1,75 @@
 import React from 'react';
-import { render } from '@testing-library/react';
-import { ControlFormRow } from './ControlFormRow';
-import { useTheme } from '@superset-ui/core';
+import { render, fireEvent, screen } from '@testing-library/react';
+import { FormattingPopover } from './FormattingPopover';
+import { FormattingPopoverContent } from './FormattingPopoverContent';
+import Popover from 'src/components/Popover';
 
-// Mocking the `useTheme` hook
-jest.mock('@superset-ui/core', () => ({
-  useTheme: jest.fn(),
+// Mock Popover and FormattingPopoverContent
+jest.mock('src/components/Popover', () => ({ children, ...props }) => (
+  <div data-testid="popover">{children}</div>
+));
+jest.mock('./FormattingPopoverContent', () => ({
+  FormattingPopoverContent: jest.fn(({ onChange }) => (
+    <div data-testid="popover-content">
+      <button onClick={() => onChange({ test: 'newConfig' })}>
+        Save Config
+      </button>
+    </div>
+  )),
 }));
 
-describe('ControlFormRow', () => {
-  const mockTheme = {
-    gridUnit: 8, // Example gridUnit value for testing
+describe('FormattingPopover', () => {
+  const mockOnChange = jest.fn();
+  const defaultProps = {
+    title: 'Test Popover',
+    columns: ['column1', 'column2'],
+    config: { test: 'config' },
+    onChange: mockOnChange,
   };
-
-  beforeEach(() => {
-    (useTheme as jest.Mock).mockReturnValue(mockTheme);
-  });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders children and applies correct styling', () => {
-    const { getByText } = render(
-      <ControlFormRow>
-        <div>Child 1</div>
-        <div>Child 2</div>
-      </ControlFormRow>
+  test('renders popover and children', () => {
+    render(
+      <FormattingPopover {...defaultProps}>
+        <div>Popover Trigger</div>
+      </FormattingPopover>,
     );
 
-    // Check that the children are rendered
-    expect(getByText('Child 1')).toBeInTheDocument();
-    expect(getByText('Child 2')).toBeInTheDocument();
+    expect(screen.getByText('Popover Trigger')).toBeInTheDocument();
+  });
 
-    // Check that the flex container has the correct styles
-    const formRow = getByText('Child 1').parentElement;
-    expect(formRow).toHaveStyle('display: flex');
-    expect(formRow).toHaveStyle('flex-wrap: nowrap');
-    expect(formRow).toHaveStyle('margin-bottom: 8px'); // 8 comes from mockTheme.gridUnit
-    expect(formRow).toHaveStyle('max-width: 100%');
+  test('opens popover on click', () => {
+    render(
+      <FormattingPopover {...defaultProps}>
+        <div>Popover Trigger</div>
+      </FormattingPopover>,
+    );
+
+    // Trigger popover by clicking the trigger
+    fireEvent.click(screen.getByText('Popover Trigger'));
+    
+    // Ensure popover content is rendered
+    expect(screen.getByTestId('popover')).toBeInTheDocument();
+    expect(screen.getByTestId('popover-content')).toBeInTheDocument();
+  });
+
+  test('calls onChange with new config on save', () => {
+    render(
+      <FormattingPopover {...defaultProps}>
+        <div>Popover Trigger</div>
+      </FormattingPopover>,
+    );
+
+    // Trigger popover by clicking the trigger
+    fireEvent.click(screen.getByText('Popover Trigger'));
+
+    // Simulate saving new config
+    fireEvent.click(screen.getByText('Save Config'));
+
+    // Check if onChange is called with new config
+    expect(mockOnChange).toHaveBeenCalledWith({ test: 'newConfig' });
   });
 });
