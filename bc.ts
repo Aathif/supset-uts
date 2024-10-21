@@ -1,116 +1,88 @@
-import React from 'react';
-import { render, fireEvent, screen } from '@testing-library/react';
-import { FormattingPopover } from './FormattingPopover';
-import { FormattingPopoverContent } from './FormattingPopoverContent';
-import { TenantLevelTargetValue } from './types';
-import Popover from 'src/components/Popover';
-import { ThemeProvider } from 'styled-components';
-import { supersetTheme } from '@superset-ui/core';
+import { AdhocFilter, isSimpleAdhocFilter, isFreeFormAdhocFilter } from '@superset-ui/core';
+import { translateToSql, OPERATORS_TO_SQL } from './translateToSql';
+import { Operators } from 'src/explore/constants';
+import { getSimpleSQLExpression } from 'src/explore/exploreUtils';
 
-// Mocking Popover and FormattingPopoverContent
-jest.mock('src/components/Popover', () => ({
-  __esModule: true,
-  default: ({ children, content, visible, onVisibleChange }) => (
-    <div>
-      <button
-        onClick={() => onVisibleChange(!visible)}
-        aria-label="popover-trigger"
-      >
-        {children}
-      </button>
-      {visible && <div>{content}</div>}
-    </div>
-  ),
+jest.mock('src/explore/exploreUtils', () => ({
+  getSimpleSQLExpression: jest.fn(),
 }));
 
-jest.mock('./FormattingPopoverContent', () => ({
-  __esModule: true,
-  FormattingPopoverContent: ({ onChange, handleClose }) => (
-    <div>
-      <button onClick={() => onChange({ tenantId: 'Default Chart' })}>Save</button>
-      <button onClick={handleClose}>Close</button>
-    </div>
-  ),
-}));
-
-describe('FormattingPopover', () => {
-  const defaultProps = {
-    title: 'Test Popover',
-    config: { tenantId: 'Initial Config' } as TenantLevelTargetValue,
-    onChange: jest.fn(),
-    children: <span>Click Me</span>,
-  };
-
-  const renderComponent = (props = {}) =>
-    render(
-      <ThemeProvider theme={supersetTheme}>
-        <FormattingPopover {...defaultProps} {...props} />
-      </ThemeProvider>,
-    );
-
+describe('translateToSql', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('renders without crashing', () => {
-    renderComponent();
-    expect(screen.getByText('Click Me')).toBeInTheDocument();
+  it('should translate a simple AdhocFilter into a SQL expression', () => {
+    const simpleFilter: AdhocFilter = {
+      subject: 'age',
+      operator: '>=',
+      comparator: 18,
+    };
+
+    (getSimpleSQLExpression as jest.Mock).mockReturnValue(
+      `"age" >= 18`,
+    );
+
+    const result = translateToSql(simpleFilter);
+
+    expect(isSimpleAdhocFilter(simpleFilter)).toBe(true);
+    expect(getSimpleSQLExpression).toHaveBeenCalledWith('age', '>=', 18);
+    expect(result).toEqual('"age" >= 18');
   });
 
-  test('opens the popover when the trigger is clicked', () => {
-    renderComponent();
+  it('should translate a simple AdhocFilter with LATEST PARTITION into a SQL expression', () => {
+    const latestPartitionFilter: AdhocFilter = {
+      subject: 'partition_column',
+      operator: 'LATEST PARTITION',
+      datasource: {
+        schema: 'schema1',
+        datasource_name: 'table1',
+      },
+    };
 
-    // Trigger click to open popover
-    fireEvent.click(screen.getByLabelText('popover-trigger'));
+    const result = translateToSql(latestPartitionFilter);
 
-    // Expect popover content to be visible
-    expect(screen.getByText('Save')).toBeInTheDocument();
+    expect(result).toEqual(
+      `= '{{ presto.latest_partition('schema1.table1') }}'`,
+    );
   });
 
-  test('closes the popover when Close is clicked', () => {
-    renderComponent();
+  it('should return a free form SQL expression when AdhocFilter is free form', () => {
+    const freeFormFilter: AdhocFilter = {
+      sqlExpression: "state = 'CA'",
+    };
 
-    // Open the popover
-    fireEvent.click(screen.getByLabelText('popover-trigger'));
+    const result = translateToSql(freeFormFilter);
 
-    // Click close button to close popover
-    fireEvent.click(screen.getByText('Close'));
-
-    // Expect popover to close (Save button should no longer be in the document)
-    expect(screen.queryByText('Save')).not.toBeInTheDocument();
+    expect(isFreeFormAdhocFilter(freeFormFilter)).toBe(true);
+    expect(result).toEqual("state = 'CA'");
   });
 
-  test('calls onChange and sets defaultTenant when tenantId is "Default Chart"', () => {
-    const onChangeMock = jest.fn();
-    renderComponent({ onChange: onChangeMock });
+  it('should return an empty string when AdhocFilter is neither simple nor free form', () => {
+    const emptyFilter: AdhocFilter = {
+      subject: '',
+      operator: '',
+    };
 
-    // Open the popover
-    fireEvent.click(screen.getByLabelText('popover-trigger'));
+    const result = translateToSql(emptyFilter);
 
-    // Click save button
-    fireEvent.click(screen.getByText('Save'));
-
-    // Expect onChange to be called with the updated config containing defaultTenant
-    expect(onChangeMock).toHaveBeenCalledWith({
-      tenantId: 'Default Chart',
-      defaultTenant: true,
-    });
+    expect(result).toEqual('');
   });
 
-  test('does not set defaultTenant when tenantId is not "Default Chart"', () => {
-    const onChangeMock = jest.fn();
-    renderComponent({ onChange: onChangeMock });
+  it('should translate with `useSimple` set to true even if the filter is not simple', () => {
+    const simpleFilter: AdhocFilter = {
+      subject: 'age',
+      operator: '>=',
+      comparator: 18,
+    };
 
-    // Mock a tenantId that is not 'Default Chart'
-    jest.spyOn(global.Math, 'random').mockReturnValueOnce(0.2); 
+    (getSimpleSQLExpression as jest.Mock).mockReturnValue(
+      `"age" >= 18`,
+    );
 
-    // Open the popover and click Save
-    fireEvent.click(screen.getByLabelText('popover-trigger'));
-    fireEvent.click(screen.getByText('Save'));
+    const result = translateToSql(simpleFilter, { useSimple: true });
 
-    expect(onChangeMock).toHaveBeenCalledWith({
-      tenantId: 'Default Chart',
-      defaultTenant: true,
-    });
+    expect(getSimpleSQLExpression).toHaveBeenCalledWith('age', '>=', 18);
+    expect(result).toEqual('"age" >= 18');
   });
 });
