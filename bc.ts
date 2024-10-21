@@ -1,88 +1,103 @@
-import { AdhocFilter, isSimpleAdhocFilter, isFreeFormAdhocFilter } from '@superset-ui/core';
-import { translateToSql, OPERATORS_TO_SQL } from './translateToSql';
-import { Operators } from 'src/explore/constants';
-import { getSimpleSQLExpression } from 'src/explore/exploreUtils';
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { useSelector } from 'react-redux';
+import { FastVizSwitcher } from './FastVizSwitcher';
+import { FEATURED_CHARTS } from './FastVizSwitcher';
+import { getChartKey } from 'src/explore/exploreUtils';
 
-jest.mock('src/explore/exploreUtils', () => ({
-  getSimpleSQLExpression: jest.fn(),
+// Mock icons to avoid rendering real SVGs in tests
+jest.mock('src/components/Icons', () => ({
+  LineChartTile: () => <div>LineChartTile</div>,
+  BarChartTile: () => <div>BarChartTile</div>,
+  AreaChartTile: () => <div>AreaChartTile</div>,
+  TableChartTile: () => <div>TableChartTile</div>,
+  BigNumberChartTile: () => <div>BigNumberChartTile</div>,
+  PieChartTile: () => <div>PieChartTile</div>,
+  MonitorOutlined: () => <div>MonitorOutlined</div>,
+  CheckSquareOutlined: () => <div>CheckSquareOutlined</div>,
 }));
 
-describe('translateToSql', () => {
+// Mock Redux and utils
+jest.mock('react-redux', () => ({
+  useSelector: jest.fn(),
+}));
+
+jest.mock('src/explore/exploreUtils', () => ({
+  getChartKey: jest.fn(),
+}));
+
+describe('FastVizSwitcher', () => {
+  const mockOnChange = jest.fn();
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('should translate a simple AdhocFilter into a SQL expression', () => {
-    const simpleFilter: AdhocFilter = {
-      subject: 'age',
-      operator: '>=',
-      comparator: 18,
-    };
+  it('renders featured charts', () => {
+    useSelector.mockReturnValue(undefined); // No chart currently selected
 
-    (getSimpleSQLExpression as jest.Mock).mockReturnValue(
-      `"age" >= 18`,
+    render(
+      <FastVizSwitcher currentSelection={null} onChange={mockOnChange} />,
     );
 
-    const result = translateToSql(simpleFilter);
-
-    expect(isSimpleAdhocFilter(simpleFilter)).toBe(true);
-    expect(getSimpleSQLExpression).toHaveBeenCalledWith('age', '>=', 18);
-    expect(result).toEqual('"age" >= 18');
+    // Assert that all featured chart icons are rendered
+    FEATURED_CHARTS.forEach(chart => {
+      expect(screen.getByText(chart.icon.props.children)).toBeInTheDocument();
+    });
   });
 
-  it('should translate a simple AdhocFilter with LATEST PARTITION into a SQL expression', () => {
-    const latestPartitionFilter: AdhocFilter = {
-      subject: 'partition_column',
-      operator: 'LATEST PARTITION',
-      datasource: {
-        schema: 'schema1',
-        datasource_name: 'table1',
-      },
-    };
+  it('renders the current selected chart if it is not in the featured list', () => {
+    useSelector.mockReturnValue(undefined); // No chart currently rendered
 
-    const result = translateToSql(latestPartitionFilter);
-
-    expect(result).toEqual(
-      `= '{{ presto.latest_partition('schema1.table1') }}'`,
-    );
-  });
-
-  it('should return a free form SQL expression when AdhocFilter is free form', () => {
-    const freeFormFilter: AdhocFilter = {
-      sqlExpression: "state = 'CA'",
-    };
-
-    const result = translateToSql(freeFormFilter);
-
-    expect(isFreeFormAdhocFilter(freeFormFilter)).toBe(true);
-    expect(result).toEqual("state = 'CA'");
-  });
-
-  it('should return an empty string when AdhocFilter is neither simple nor free form', () => {
-    const emptyFilter: AdhocFilter = {
-      subject: '',
-      operator: '',
-    };
-
-    const result = translateToSql(emptyFilter);
-
-    expect(result).toEqual('');
-  });
-
-  it('should translate with `useSimple` set to true even if the filter is not simple', () => {
-    const simpleFilter: AdhocFilter = {
-      subject: 'age',
-      operator: '>=',
-      comparator: 18,
-    };
-
-    (getSimpleSQLExpression as jest.Mock).mockReturnValue(
-      `"age" >= 18`,
+    render(
+      <FastVizSwitcher
+        currentSelection="custom_chart"
+        onChange={mockOnChange}
+      />,
     );
 
-    const result = translateToSql(simpleFilter, { useSimple: true });
+    expect(screen.getByText('MonitorOutlined')).toBeInTheDocument();
+  });
 
-    expect(getSimpleSQLExpression).toHaveBeenCalledWith('age', '>=', 18);
-    expect(result).toEqual('"age" >= 18');
+  it('renders the currently rendered chart if it is not in the featured list', () => {
+    useSelector.mockReturnValue('custom_rendered_chart'); // Current chart rendered is not in featured list
+
+    render(
+      <FastVizSwitcher
+        currentSelection="custom_chart"
+        onChange={mockOnChange}
+      />,
+    );
+
+    expect(screen.getByText('CheckSquareOutlined')).toBeInTheDocument();
+  });
+
+  it('calls onChange when a tile is clicked', () => {
+    useSelector.mockReturnValue(undefined); // No chart currently selected
+
+    render(
+      <FastVizSwitcher currentSelection={null} onChange={mockOnChange} />,
+    );
+
+    // Click the first featured chart
+    const firstChartTile = screen.getByText('LineChartTile');
+    fireEvent.click(firstChartTile);
+
+    expect(mockOnChange).toHaveBeenCalledWith('echarts_timeseries_line');
+  });
+
+  it('highlights the current selection', () => {
+    useSelector.mockReturnValue(undefined); // No chart currently selected
+
+    render(
+      <FastVizSwitcher
+        currentSelection="echarts_timeseries_line"
+        onChange={mockOnChange}
+      />,
+    );
+
+    // Assert that the current selection is highlighted
+    const activeTile = screen.getByText('LineChartTile');
+    expect(activeTile.parentElement).toHaveStyle('background-color: rgba(0,0,0,0.1)');
   });
 });
