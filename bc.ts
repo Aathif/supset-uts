@@ -1,82 +1,137 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { ChartPills, ChartPillsProps } from './ChartPills'; // Assuming the file is named ChartPills.tsx
-import '@testing-library/jest-dom/extend-expect';
-import userEvent from '@testing-library/user-event';
+import { renderHook, act } from '@testing-library/react-hooks';
+import { ensureIsArray, getChartMetadataRegistry, t } from '@superset-ui/core';
+import { useResultsPane } from './useResultsPane'; // Assuming the file is named useResultsPane.tsx
+import { getChartDataRequest } from 'src/components/Chart/chartAction';
+import { getClientErrorObject } from 'src/utils/getClientErrorObject';
+import Loading from 'src/components/Loading';
+import { EmptyStateMedium } from 'src/components/EmptyState';
+import { SingleQueryResultPane } from './SingleQueryResultPane';
 
-// Mock components
-jest.mock('src/explore/components/RowCountLabel', () => ({
-  __esModule: true,
-  default: ({ rowcount, limit }: { rowcount: number; limit: number }) => (
-    <div>{`Rows: ${rowcount} / Limit: ${limit}`}</div>
-  ),
+// Mock dependencies
+jest.mock('@superset-ui/core', () => ({
+  ...jest.requireActual('@superset-ui/core'),
+  ensureIsArray: jest.fn(arr => Array.isArray(arr) ? arr : [arr]),
+  getChartMetadataRegistry: () => ({
+    get: jest.fn(() => ({ queryObjectCount: 1 })),
+  }),
+  t: jest.fn((str) => str),
+}));
+jest.mock('src/components/Chart/chartAction', () => ({
+  getChartDataRequest: jest.fn(),
+}));
+jest.mock('src/utils/getClientErrorObject', () => ({
+  getClientErrorObject: jest.fn(),
+}));
+jest.mock('src/components/Loading', () => jest.fn(() => <div>Loading...</div>));
+jest.mock('src/components/EmptyState', () => ({
+  EmptyStateMedium: jest.fn(({ title }) => <div>{title}</div>),
+}));
+jest.mock('./SingleQueryResultPane', () => ({
+  SingleQueryResultPane: jest.fn(() => <div>SingleQueryResultPane</div>),
 }));
 
-jest.mock('src/components/CachedLabel', () => ({
-  __esModule: true,
-  default: ({ cachedTimestamp, onClick }: { cachedTimestamp: string; onClick: () => void }) => (
-    <div onClick={onClick}>{`Cached at: ${cachedTimestamp}`}</div>
-  ),
-}));
-
-jest.mock('src/components/Timer', () => ({
-  __esModule: true,
-  default: ({ startTime, endTime, isRunning, status }: any) => (
-    <div>{`Timer: ${isRunning ? 'Running' : 'Stopped'}, Status: ${status}, Time: ${startTime}-${endTime}`}</div>
-  ),
-}));
-
-describe('ChartPills', () => {
-  const defaultProps: ChartPillsProps = {
-    queriesResponse: [
-      {
-        sql_rowcount: 100,
-        is_cached: true,
-        cached_dttm: '2024-10-10 12:00:00',
-      },
-    ] as any[], // as we mock queriesResponse, we simplify its structure
-    chartStatus: 'success',
-    chartUpdateStartTime: 1000,
-    chartUpdateEndTime: 2000,
-    refreshCachedQuery: jest.fn(),
-    rowLimit: 500,
+describe('useResultsPane', () => {
+  const defaultProps = {
+    isRequest: true,
+    queryFormData: { viz_type: 'table', datasource: '1234' },
+    queryForce: false,
+    ownState: {},
+    errorMessage: '',
+    actions: { setForceQuery: jest.fn() },
+    isVisible: true,
+    dataSize: 50,
   };
 
-  it('renders RowCountLabel and CachedLabel when not loading', () => {
-    render(<ChartPills {...defaultProps} ref={null} />);
+  it('should display Loading component when data is being fetched', async () => {
+    getChartDataRequest.mockResolvedValue({ json: { result: [] } });
+    
+    const { result, waitForNextUpdate } = renderHook(() =>
+      useResultsPane(defaultProps),
+    );
+    
+    // Initially, it should render the Loading component
+    expect(result.current[0].type).toBe(Loading);
+    
+    await act(async () => {
+      await waitForNextUpdate(); // Wait for hook to finish updating
+    });
 
-    // Check if RowCountLabel renders correctly
-    expect(screen.getByText('Rows: 100 / Limit: 500')).toBeInTheDocument();
-
-    // Check if CachedLabel renders correctly
-    expect(screen.getByText('Cached at: 2024-10-10 12:00:00')).toBeInTheDocument();
+    // Loading should disappear after data is loaded
+    expect(result.current[0].type).not.toBe(Loading);
   });
 
-  it('calls refreshCachedQuery when CachedLabel is clicked', () => {
-    render(<ChartPills {...defaultProps} ref={null} />);
+  it('should render error state if an error occurs', async () => {
+    const mockError = 'Network error';
+    getClientErrorObject.mockResolvedValue({ error: mockError });
+    getChartDataRequest.mockRejectedValue(new Error(mockError));
 
-    const cachedLabel = screen.getByText('Cached at: 2024-10-10 12:00:00');
-    userEvent.click(cachedLabel);
+    const { result, waitForNextUpdate } = renderHook(() =>
+      useResultsPane(defaultProps),
+    );
 
-    expect(defaultProps.refreshCachedQuery).toHaveBeenCalled();
+    await act(async () => {
+      await waitForNextUpdate(); // Wait for hook to finish updating
+    });
+
+    expect(result.current[0].props.children).toContain(mockError); // Error message
   });
 
-  it('renders Timer with correct status', () => {
-    render(<ChartPills {...defaultProps} ref={null} />);
+  it('should render EmptyState if no data is returned', async () => {
+    getChartDataRequest.mockResolvedValue({ json: { result: [] } });
 
-    // Check if Timer renders with correct props
-    expect(screen.getByText('Timer: Stopped, Status: success, Time: 1000-2000')).toBeInTheDocument();
+    const { result, waitForNextUpdate } = renderHook(() =>
+      useResultsPane(defaultProps),
+    );
+
+    await act(async () => {
+      await waitForNextUpdate(); // Wait for hook to finish updating
+    });
+
+    expect(result.current[0].type).toBe(EmptyStateMedium);
+    expect(result.current[0].props.title).toBe('No results were returned for this query');
   });
 
-  it('does not render RowCountLabel or CachedLabel when loading', () => {
-    const loadingProps = { ...defaultProps, chartStatus: 'loading' };
-    render(<ChartPills {...loadingProps} ref={null} />);
+  it('should render SingleQueryResultPane when data is available', async () => {
+    const mockData = {
+      result: [{
+        data: [['John Doe', 35], ['Jane Doe', 28]],
+        colnames: ['name', 'age'],
+        coltypes: ['string', 'int'],
+        rowcount: 2,
+      }],
+    };
+    getChartDataRequest.mockResolvedValue({ json: mockData });
 
-    // Check that RowCountLabel and CachedLabel do not render
-    expect(screen.queryByText('Rows: 100 / Limit: 500')).not.toBeInTheDocument();
-    expect(screen.queryByText('Cached at: 2024-10-10 12:00:00')).not.toBeInTheDocument();
+    const { result, waitForNextUpdate } = renderHook(() =>
+      useResultsPane(defaultProps),
+    );
 
-    // Check if Timer renders with loading status
-    expect(screen.getByText('Timer: Running, Status: warning, Time: 1000-2000')).toBeInTheDocument();
+    await act(async () => {
+      await waitForNextUpdate(); // Wait for hook to finish updating
+    });
+
+    expect(SingleQueryResultPane).toHaveBeenCalled();
+    expect(result.current.length).toBe(1);
+    expect(result.current[0].props.data).toEqual(mockData.result[0].data);
+    expect(result.current[0].props.colnames).toEqual(mockData.result[0].colnames);
+  });
+
+  it('should use cached data if available', async () => {
+    const cachedResult = {
+      data: [['John Doe', 35]],
+      colnames: ['name', 'age'],
+      coltypes: ['string', 'int'],
+      rowcount: 1,
+    };
+    const cache = new WeakMap();
+    cache.set(defaultProps.queryFormData, [cachedResult]);
+
+    const { result } = renderHook(() =>
+      useResultsPane({ ...defaultProps, isRequest: true }),
+    );
+
+    // Since cache is set, it should use the cached data
+    expect(result.current[0].type).toBe(SingleQueryResultPane);
   });
 });
