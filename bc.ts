@@ -1,27 +1,17 @@
-import { setDatasources } from './path_to_setDatasources';
-import { DatasourcesAction } from './path_to_DatasourcesAction'; // Import your action type enum or constants
+import { setDatasource } from './path_to_setDatasource';
+import { DatasourcesAction } from './path_to_DatasourcesAction'; // Assuming this contains the action type constants
 
-describe('setDatasources action creator', () => {
-  it('should create an action to set datasources with a non-null payload', () => {
-    const mockDatasources = [
-      { id: 1, name: 'Datasource 1' },
-      { id: 2, name: 'Datasource 2' },
-    ];
+describe('setDatasource action creator', () => {
+  it('should create an action to set a specific datasource', () => {
+    const mockDatasource = { id: 1, name: 'Test Datasource' };
+    const key = 'testKey';
 
     const expectedAction = {
-      type: DatasourcesAction.SetDatasources,
-      datasources: mockDatasources,
+      type: DatasourcesAction.SetDatasource,
+      key,
+      datasource: mockDatasource,
     };
 
-    expect(setDatasources(mockDatasources)).toEqual(expectedAction);
-  });
-
-  it('should create an action to set datasources with a null payload', () => {
-    const expectedAction = {
-      type: DatasourcesAction.SetDatasources,
-      datasources: null,
-    };
-
-    expect(setDatasources(null)).toEqual(expectedAction);
+    expect(setDatasource(mockDatasource, key)).toEqual(expectedAction);
   });
 });
