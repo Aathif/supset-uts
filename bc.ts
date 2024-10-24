@@ -1,27 +1,24 @@
-import { xAxisMixin } from './path_to_file';
+import { temporalColumnMixin } from './path_to_file';
+import { getTemporalColumns } from '../utils';
 
-describe('xAxisMixin', () => {
-  const control = { value: undefined };
-  const state = {
-    form_data: { granularity_sqla: 'timestamp', x_axis: null },
-  };
+jest.mock('../utils', () => ({
+  getTemporalColumns: jest.fn(),
+}));
 
-  it('should return correct axis label based on form_data orientation', () => {
-    const horizontalState = { form_data: { orientation: 'horizontal' } };
-    const verticalState = { form_data: { orientation: 'vertical' } };
+describe('temporalColumnMixin', () => {
+  it('should map state to props with correct temporal columns', () => {
+    const datasource = {};
+    const mockTemporalColumns = {
+      temporalColumns: ['col1', 'col2'],
+      defaultTemporalColumn: 'col1',
+    };
+    getTemporalColumns.mockReturnValue(mockTemporalColumns);
 
-    expect(xAxisMixin.label(horizontalState)).toBe('Y-axis');
-    expect(xAxisMixin.label(verticalState)).toBe('X-axis');
-  });
-
-  it('should set the initial value to granularity_sqla if x_axis is not defined', () => {
-    const result = xAxisMixin.initialValue(control, state);
-    expect(result).toBe('timestamp');
-  });
-
-  it('should return undefined as the initial value if conditions are not met', () => {
-    const noGranularityState = { form_data: {} };
-    const result = xAxisMixin.initialValue(control, noGranularityState);
-    expect(result).toBeUndefined();
+    const props = temporalColumnMixin.mapStateToProps({ datasource });
+    expect(getTemporalColumns).toHaveBeenCalledWith(datasource);
+    expect(props).toEqual({
+      options: ['col1', 'col2'],
+      default: 'col1',
+    });
   });
 });
