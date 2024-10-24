@@ -1,125 +1,147 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { t } from '@superset-ui/core';
-import { SingleQueryResultPane } from './SingleQueryResultPane';
-import { TableControls } from './DataTableControls';
-import TableView from 'src/components/TableView';
-import {
-  useFilteredTableData,
-  useTableColumns,
-} from 'src/explore/components/DataTableControl';
+import { hydrateDashboard, HYDRATE_DASHBOARD } from './path_to_hydrateDashboard';
+import { applyDefaultFormData } from 'src/explore/store';
+import { updateColorSchema } from './dashboardInfo';
+import { getInitialNativeFilterState } from 'src/dashboard/reducers/nativeFilters';
+import { buildActiveFilters } from 'src/dashboard/util/activeDashboardFilters';
+import newComponentFactory from 'src/dashboard/util/newComponentFactory';
+import extractUrlParams from '../util/extractUrlParams';
+import { findPermission } from 'src/utils/findPermission';
+import { canUserEditDashboard, canUserSaveAsDashboard } from 'src/dashboard/util/permissionUtils';
+import { URL_PARAMS } from 'src/constants';
+import { ResourceStatus } from 'src/hooks/apiResources/apiResources';
 
-// Mock dependencies
-jest.mock('@superset-ui/core', () => ({
-  ...jest.requireActual('@superset-ui/core'),
-  t: jest.fn((str) => str),
+// Mock necessary dependencies
+jest.mock('src/explore/store', () => ({
+  applyDefaultFormData: jest.fn(formData => formData),
 }));
-
-jest.mock('src/components/TableView', () =>
-  jest.fn(() => <div>TableView</div>),
-);
-
-jest.mock('src/explore/components/DataTableControl', () => ({
-  useFilteredTableData: jest.fn(),
-  useTableColumns: jest.fn(),
+jest.mock('./dashboardInfo', () => ({
+  updateColorSchema: jest.fn(),
 }));
-
-jest.mock('./DataTableControls', () => ({
-  TableControls: jest.fn(() => <div>TableControls</div>),
+jest.mock('src/dashboard/reducers/nativeFilters', () => ({
+  getInitialNativeFilterState: jest.fn(),
 }));
+jest.mock('src/dashboard/util/activeDashboardFilters', () => ({
+  buildActiveFilters: jest.fn(),
+}));
+jest.mock('../util/extractUrlParams', () => jest.fn());
+jest.mock('src/utils/findPermission', () => ({
+  findPermission: jest.fn(),
+}));
+jest.mock('src/dashboard/util/permissionUtils', () => ({
+  canUserEditDashboard: jest.fn(),
+  canUserSaveAsDashboard: jest.fn(),
+}));
+jest.mock('src/dashboard/util/newComponentFactory', () => jest.fn());
 
-describe('SingleQueryResultPane', () => {
-  const defaultProps = {
-    data: [
-      { col1: 'John', col2: 35 },
-      { col1: 'Jane', col2: 28 },
-    ],
-    colnames: ['col1', 'col2'],
-    coltypes: ['string', 'int'],
-    rowcount: 2,
-    datasourceId: '1234',
-    dataSize: 50,
-    isVisible: true,
+describe('hydrateDashboard', () => {
+  const mockDashboard = {
+    metadata: {
+      shared_label_colors: { color1: '#ff0000' },
+      label_colors: { label1: '#00ff00' },
+      native_filter_configuration: [],
+      expanded_slices: {},
+      refresh_frequency: 0,
+      css: '',
+      color_namespace: null,
+      color_scheme: null,
+    },
+    dashboard_title: 'Test Dashboard',
+    changed_on: '2024-10-01',
+    published: true,
   };
 
-  beforeEach(() => {
+  const mockChart = {
+    slice_id: 1,
+    form_data: { slice_id: 1, viz_type: 'bar' },
+    slice_url: '/slice/1',
+    slice_name: 'Test Slice',
+    datasource: { name: 'Test Datasource' },
+    description: 'Test description',
+    owners: [],
+    modified: '2024-09-30',
+    changed_on: '2024-09-30',
+  };
+
+  const mockCharts = [mockChart];
+  const mockGetState = jest.fn(() => ({
+    user: { userId: 1, roles: [] },
+    common: { conf: {} },
+    dashboardState: {},
+  }));
+  const mockDispatch = jest.fn();
+  const mockHistory = {
+    replace: jest.fn(),
+  };
+
+  afterEach(() => {
     jest.clearAllMocks();
   });
 
-  it('renders TableControls and TableView with the correct data', () => {
-    // Mock filtered data to be the same as original data
-    useFilteredTableData.mockReturnValue(defaultProps.data);
-    useTableColumns.mockReturnValue([
-      { Header: 'col1', accessor: 'col1' },
-      { Header: 'col2', accessor: 'col2' },
-    ]);
+  it('should dispatch HYDRATE_DASHBOARD action with the correct data', async () => {
+    extractUrlParams.mockReturnValueOnce({ edit: 'false' });
+    canUserEditDashboard.mockReturnValueOnce(true);
+    canUserSaveAsDashboard.mockReturnValueOnce(true);
+    findPermission.mockReturnValueOnce(true);
+    getInitialNativeFilterState.mockReturnValueOnce({});
 
-    render(<SingleQueryResultPane {...defaultProps} />);
+    await hydrateDashboard({
+      history: mockHistory,
+      dashboard: mockDashboard,
+      charts: mockCharts,
+      dataMask: {},
+      activeTabs: [],
+    })(mockDispatch, mockGetState);
 
-    // Check that TableControls was rendered
-    expect(TableControls).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: defaultProps.data,
-        columnNames: defaultProps.colnames,
-        columnTypes: defaultProps.coltypes,
-        rowcount: defaultProps.rowcount,
-        datasourceId: defaultProps.datasourceId,
-        isLoading: false,
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: HYDRATE_DASHBOARD,
+      data: expect.objectContaining({
+        charts: expect.objectContaining({
+          1: expect.objectContaining({
+            id: 1,
+            form_data: expect.any(Object),
+          }),
+        }),
+        dashboardInfo: expect.objectContaining({
+          dash_edit_perm: true,
+          dash_save_perm: true,
+          superset_can_explore: true,
+        }),
       }),
-      {},
-    );
+    });
 
-    // Check that TableView was rendered
-    expect(TableView).toHaveBeenCalledWith(
-      expect.objectContaining({
-        columns: [
-          { Header: 'col1', accessor: 'col1' },
-          { Header: 'col2', accessor: 'col2' },
-        ],
-        data: defaultProps.data,
-        pageSize: defaultProps.dataSize,
-        noDataText: t('No results'),
-      }),
-      {},
+    expect(updateColorSchema).toHaveBeenCalledWith(
+      mockDashboard.metadata,
+      mockDashboard.metadata.shared_label_colors,
     );
   });
 
-  it('handles filter input change', () => {
-    const mockSetFilterText = jest.fn();
-    React.useState = jest.fn(() => ['', mockSetFilterText]);
+  it('should call updateColorSchema if label_colors exist', async () => {
+    await hydrateDashboard({
+      history: mockHistory,
+      dashboard: mockDashboard,
+      charts: mockCharts,
+      dataMask: {},
+      activeTabs: [],
+    })(mockDispatch, mockGetState);
 
-    useFilteredTableData.mockReturnValue(defaultProps.data);
-    useTableColumns.mockReturnValue([
-      { Header: 'col1', accessor: 'col1' },
-      { Header: 'col2', accessor: 'col2' },
-    ]);
-
-    render(<SingleQueryResultPane {...defaultProps} />);
-
-    // Simulate filter input change
-    const filterInput = screen.getByRole('textbox'); // Assuming the filter input is a textbox
-    fireEvent.change(filterInput, { target: { value: 'Jane' } });
-
-    // Expect filter text state to be updated
-    expect(mockSetFilterText).toHaveBeenCalledWith('Jane');
+    expect(updateColorSchema).toHaveBeenCalledWith(
+      mockDashboard.metadata,
+      mockDashboard.metadata.label_colors,
+    );
   });
 
-  it('displays no results message when data is empty', () => {
-    // Mock empty filtered data
-    useFilteredTableData.mockReturnValue([]);
-    useTableColumns.mockReturnValue([
-      { Header: 'col1', accessor: 'col1' },
-      { Header: 'col2', accessor: 'col2' },
-    ]);
+  it('should handle URL parameters correctly', async () => {
+    extractUrlParams.mockReturnValueOnce({ edit: 'true' });
 
-    render(<SingleQueryResultPane {...defaultProps} />);
+    await hydrateDashboard({
+      history: mockHistory,
+      dashboard: mockDashboard,
+      charts: mockCharts,
+      dataMask: {},
+      activeTabs: [],
+    })(mockDispatch, mockGetState);
 
-    // Check that the no data text is rendered
-    expect(TableView).toHaveBeenCalledWith(
-      expect.objectContaining({
-        noDataText: t('No results'),
-      }),
-      {},
-    );
+    expect(extractUrlParams).toHaveBeenCalledWith('regular');
+    expect(mockHistory.replace).toHaveBeenCalled();
   });
 });
